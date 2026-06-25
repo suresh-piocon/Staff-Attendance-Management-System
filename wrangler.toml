@@ -1,6 +1,0 @@
-name = "staff-attendance-management-system"
-pages_build_output_dir = "publish/wwwroot"
-
-# This project is built via GitHub Actions (see .github/workflows/deploy.yml)
-# Cloudflare Pages automatic builds are NOT used because they do not have
-# the .NET 9 SDK installed. GitHub Actions handles the full build + deploy.
