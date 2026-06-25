@@ -13,6 +13,23 @@
     </div>
 </div>
 
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div style="background:rgba(231,76,60,0.15);border:1px solid rgba(231,76,60,0.4);border-radius:10px;padding:14px 20px;margin-bottom:16px;color:#e74c3c;display:flex;align-items:center;gap:10px;">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span><strong>Save failed:</strong> @errorMessage</span>
+        <button @onclick='() => errorMessage = string.Empty' style="margin-left:auto;background:none;border:none;color:#e74c3c;cursor:pointer;"><i class="bi bi-x-lg"></i></button>
+    </div>
+}
+
+@if (saveSuccess)
+{
+    <div style="background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.4);border-radius:10px;padding:14px 20px;margin-bottom:16px;color:#2ecc71;display:flex;align-items:center;gap:10px;">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>Attendance saved successfully!</span>
+    </div>
+}
+
 @if (isLoading)
 {
     <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
@@ -78,12 +95,16 @@ else
     private DateTime selectedDate = DateTime.Today;
     private bool isLoading = true;
     private bool isSaving = false;
+    private string errorMessage = string.Empty;
+    private bool saveSuccess = false;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
     private async Task LoadData()
     {
         isLoading = true;
+        errorMessage = string.Empty;
+        saveSuccess = false;
         salesmen = await SalesmanService.GetActiveSalesmenAsync();
         rows = await AttendanceService.GetAttendanceByDateAsync(selectedDate);
         attendanceMap = new Dictionary<string, string>();
@@ -98,17 +119,31 @@ else
     private void SetStatus(string salesmanId, string status)
     {
         attendanceMap[salesmanId] = status;
+        saveSuccess = false;
     }
 
     private async Task SaveAll()
     {
         isSaving = true;
-        foreach (var (sid, status) in attendanceMap)
+        errorMessage = string.Empty;
+        saveSuccess = false;
+        try
         {
-            // Temporarily switch to the selected date for saving
-            await AttendanceService.MarkAttendanceForDateAsync(sid, selectedDate, status);
+            foreach (var (sid, status) in attendanceMap)
+            {
+                await AttendanceService.MarkAttendanceForDateAsync(sid, selectedDate, status);
+            }
+            saveSuccess = true;
+            await LoadData();
         }
-        isSaving = false;
-        await LoadData();
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            Console.Error.WriteLine($"[Attendance SaveAll] Error: {ex}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
     }
 }
