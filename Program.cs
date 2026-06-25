@@ -12,8 +12,8 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // Supabase Client
 //var supabaseUrl = builder.Configuration["Supabase:Url"] ?? "";
 //var supabaseKey = builder.Configuration["Supabase:Key"] ?? "";
-var supabaseUrl = builder.Configuration["https://sawhokfpoyhzgvvxjnej.supabase.co"] ?? "";
-var supabaseKey = builder.Configuration["sb_publishable_jse-ZnMwsUTy-SRXlkvO6A_5xW3MKhB"] ?? "";
+var supabaseUrl = builder.Configuration["Supabase:Url"] ?? "";
+var supabaseKey = builder.Configuration["Supabase:Key"] ?? "";
 
 var options = new SupabaseOptions
 {

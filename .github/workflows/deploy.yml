@@ -30,7 +30,13 @@ jobs:
       - name: Publish
         run: dotnet publish -c Release -o publish
 
-      # ── 5. Deploy to Cloudflare Pages ─────────────────────────
+      # ── 5. Create 404.html for SPA routing ───────────────────
+      # Cloudflare Pages serves 404.html for any unmatched path,
+      # giving Blazor WASM the client-side routing fallback it needs.
+      - name: Create 404.html for SPA routing
+        run: cp publish/wwwroot/index.html publish/wwwroot/404.html
+
+      # ── 6. Deploy to Cloudflare Pages ─────────────────────────
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
