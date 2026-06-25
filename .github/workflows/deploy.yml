@@ -42,4 +42,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy publish/wwwroot --project-name=staff-attendance-system --commit-dirty=true
+          command: pages deploy publish/wwwroot --project-name=staff-attendance-management-system --commit-dirty=true
