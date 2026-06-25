@@ -22,7 +22,17 @@ var options = new SupabaseOptions
 };
 
 var supabaseClient = new Supabase.Client(supabaseUrl, supabaseKey, options);
-await supabaseClient.InitializeAsync();
+
+try
+{
+    await supabaseClient.InitializeAsync();
+}
+catch (Exception ex)
+{
+    // Log to browser console - open DevTools (F12) > Console to see this
+    Console.Error.WriteLine($"[Startup] Supabase init warning: {ex.Message}");
+    // Do NOT rethrow - let the app boot. Auth failures will surface on login.
+}
 
 builder.Services.AddSingleton(supabaseClient);
 
