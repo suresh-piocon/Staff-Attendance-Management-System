@@ -1,0 +1,131 @@
+@page "/admin/customers"
+@attribute [Authorize(Roles = "Admin")]
+@inject CustomerService CustomerService
+@inject SalesmanService SalesmanService
+
+<PageTitle>Customers — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-people-fill"></i> All Customers</h1>
+    <div class="page-header-actions">
+        <a href="/customer-entry" class="btn-primary-glass">
+            <i class="bi bi-plus-lg"></i> New Customer
+        </a>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <input class="form-control" placeholder="Search by name or mobile..." @bind="searchText" @bind:event="oninput" />
+    <select class="form-control" @bind="filterStatus">
+        <option value="">All Status</option>
+        <option value="Open">Open</option>
+        <option value="Closed">Closed</option>
+        <option value="Converted">Converted</option>
+    </select>
+    <select class="form-control" @bind="filterSalesmanId">
+        <option value="">All Salesmen</option>
+        @foreach (var s in salesmen)
+        {
+            <option value="@s.Id">@s.Name</option>
+        }
+    </select>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+}
+else
+{
+    <div class="glass-card">
+        <div class="card-body" style="padding:0;">
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Customer</th>
+                            <th>Mobile</th>
+                            <th>City</th>
+                            <th>Product</th>
+                            <th>Visit Date</th>
+                            <th>Assigned To</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var filtered = GetFiltered();
+                        }
+                        @if (!filtered.Any())
+                        {
+                            <tr><td colspan="9"><div class="empty-state"><i class="bi bi-person-x"></i><p>No customers found</p></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var (c, idx) in filtered.Select((c, i) => (c, i + 1)))
+                            {
+                                <tr>
+                                    <td class="muted">@idx</td>
+                                    <td class="fw-600">@c.Name</td>
+                                    <td class="muted">@c.Mobile</td>
+                                    <td class="muted">@c.City</td>
+                                    <td class="muted">@c.InterestedProduct</td>
+                                    <td class="muted">@c.VisitDate</td>
+                                    <td>
+                                        <span class="text-gold fw-600">
+                                            @(salesmen.FirstOrDefault(s => s.Id == c.AssignedSalesmanId)?.Name ?? "Unassigned")
+                                        </span>
+                                    </td>
+                                    <td><span class="badge badge-@c.Status.ToLower()">@c.Status</span></td>
+                                    <td>
+                                        <select class="form-control" style="padding:4px 8px;font-size:12px;"
+                                                @onchange="@(async e => await UpdateStatus(c.Id, e.Value?.ToString() ?? string.Empty))">
+                                            <option value="Open" selected="@(c.Status=="Open")">Open</option>
+                                            <option value="Closed" selected="@(c.Status=="Closed")">Closed</option>
+                                            <option value="Converted" selected="@(c.Status=="Converted")">Converted</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Customer> customers = new();
+    private List<Salesman> salesmen = new();
+    private string searchText = "";
+    private string filterStatus = "";
+    private string filterSalesmanId = "";
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        salesmen = await SalesmanService.GetAllSalesmenAsync();
+        customers = await CustomerService.GetAllCustomersAsync();
+        isLoading = false;
+    }
+
+    private IEnumerable<Customer> GetFiltered()
+    {
+        return customers
+            .Where(c => string.IsNullOrEmpty(searchText) ||
+                        c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Mobile ?? "").Contains(searchText))
+            .Where(c => string.IsNullOrEmpty(filterStatus) || c.Status == filterStatus)
+            .Where(c => string.IsNullOrEmpty(filterSalesmanId) || c.AssignedSalesmanId == filterSalesmanId);
+    }
+
+    private async Task UpdateStatus(string customerId, string status)
+    {
+        await CustomerService.UpdateCustomerStatusAsync(customerId, status);
+        var c = customers.FirstOrDefault(x => x.Id == customerId);
+        if (c != null) c.Status = status;
+    }
+}

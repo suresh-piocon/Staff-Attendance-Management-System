@@ -1,0 +1,89 @@
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject SupabaseAuthStateProvider AuthStateProvider
+
+<nav class="sidebar">
+    <a href="/" class="sidebar-brand">
+        <div class="brand-logo">
+            <div class="brand-icon">🧣</div>
+            <div>
+                <div class="brand-name">Silk Saree Shop</div>
+                <div class="brand-sub">Attendance System</div>
+            </div>
+        </div>
+    </a>
+
+    <div class="sidebar-nav">
+        <AuthorizeView Roles="Admin">
+            <div class="nav-section-title">Admin Panel</div>
+            <a href="/admin/dashboard" class="nav-item @IsActive("/admin/dashboard")">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+            <a href="/admin/attendance" class="nav-item @IsActive("/admin/attendance")">
+                <i class="bi bi-calendar-check"></i> Attendance
+            </a>
+            <a href="/admin/salesmen" class="nav-item @IsActive("/admin/salesmen")">
+                <i class="bi bi-people"></i> Salesmen
+            </a>
+            <a href="/customer-entry" class="nav-item @IsActive("/customer-entry")">
+                <i class="bi bi-person-plus"></i> New Customer
+            </a>
+            <a href="/admin/customers" class="nav-item @IsActive("/admin/customers")">
+                <i class="bi bi-people-fill"></i> All Customers
+            </a>
+            <a href="/admin/followups" class="nav-item @IsActive("/admin/followups")">
+                <i class="bi bi-bell"></i> Follow-Ups
+            </a>
+            <a href="/admin/reports" class="nav-item @IsActive("/admin/reports")">
+                <i class="bi bi-bar-chart-line"></i> Reports
+            </a>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Salesman">
+            <div class="nav-section-title">My Panel</div>
+            <a href="/salesman/dashboard" class="nav-item @IsActive("/salesman/dashboard")">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+            <a href="/salesman/customers" class="nav-item @IsActive("/salesman/customers")">
+                <i class="bi bi-people"></i> My Customers
+            </a>
+            <a href="/salesman/followups" class="nav-item @IsActive("/salesman/followups")">
+                <i class="bi bi-bell"></i> Follow-Ups
+            </a>
+        </AuthorizeView>
+    </div>
+
+    <div class="sidebar-footer">
+        <div class="user-info">
+            <div class="user-avatar">@GetInitial()</div>
+            <div class="user-details">
+                <div class="user-name">@GetEmail()</div>
+                <div class="user-role">@AuthService.GetUserRole()</div>
+            </div>
+        </div>
+        <button class="btn-logout" @onclick="Logout">
+            <i class="bi bi-box-arrow-left"></i> Sign Out
+        </button>
+    </div>
+</nav>
+
+@code {
+    private string IsActive(string path)
+        => Nav.Uri.Contains(path) ? "active" : "";
+
+    private string GetEmail()
+        => AuthService.GetCurrentUser()?.Email ?? "User";
+
+    private string GetInitial()
+    {
+        var email = GetEmail();
+        return email.Length > 0 ? email[0].ToString().ToUpper() : "U";
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.SignOutAsync();
+        AuthStateProvider.NotifyAuthStateChanged();
+        Nav.NavigateTo("/login");
+    }
+}

@@ -1,0 +1,193 @@
+@page "/salesman/customers"
+@attribute [Authorize(Roles = "Salesman")]
+@inject CustomerService CustomerService
+@inject AuthService AuthService
+@inject SalesmanService SalesmanService
+
+<PageTitle>My Customers — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-people"></i> My Customers</h1>
+</div>
+
+<div class="filter-bar">
+    <input class="form-control" placeholder="Search by name or mobile..." @bind="searchText" @bind:event="oninput" />
+    <select class="form-control" @bind="filterStatus">
+        <option value="">All Status</option>
+        <option value="Open">Open</option>
+        <option value="Closed">Closed</option>
+        <option value="Converted">Converted</option>
+    </select>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+}
+else
+{
+    <div class="glass-card">
+        <div class="card-body" style="padding:0;">
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Customer</th>
+                            <th>Mobile</th>
+                            <th>City</th>
+                            <th>Product Interest</th>
+                            <th>Visit Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var filtered = GetFiltered().ToList();
+                        }
+                        @if (!filtered.Any())
+                        {
+                            <tr><td colspan="8"><div class="empty-state"><i class="bi bi-person-x"></i><p>No customers found</p></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var (c, idx) in filtered.Select((c, i) => (c, i + 1)))
+                            {
+                                <tr>
+                                    <td class="muted">@idx</td>
+                                    <td class="fw-600">@c.Name</td>
+                                    <td class="muted">@c.Mobile</td>
+                                    <td class="muted">@c.City</td>
+                                    <td class="muted">@c.InterestedProduct</td>
+                                    <td class="muted">@c.VisitDate</td>
+                                    <td><span class="badge badge-@c.Status.ToLower()">@c.Status</span></td>
+                                    <td>
+                                        <button class="btn-primary-glass btn-sm" @onclick="() => OpenFollowUp(c)">
+                                            <i class="bi bi-bell-plus"></i> Follow-Up
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Follow-Up Modal -->
+@if (showFollowUpModal && selectedCustomer != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="bi bi-bell-plus"></i> Add Follow-Up for @selectedCustomer.Name</h3>
+                <button class="modal-close" @onclick="() => showFollowUpModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Follow-Up Date</label>
+                    <input type="date" class="form-control" @bind="followUpDate" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-control" @bind="followUpStatus">
+                        <option>Interested</option>
+                        <option>Not Interested</option>
+                        <option>Purchase Confirmed</option>
+                        <option>Follow-up Again</option>
+                    </select>
+                </div>
+                @if (followUpStatus == "Follow-up Again")
+                {
+                    <div class="form-group">
+                        <label class="form-label">Next Follow-Up Date</label>
+                        <input type="date" class="form-control" @bind="nextFollowUpDate" />
+                    </div>
+                }
+                <div class="form-group">
+                    <label class="form-label">Remarks</label>
+                    <textarea class="form-control" rows="3" placeholder="Add remarks..."
+                              @bind="followUpRemarks" style="resize:vertical;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary-glass" @onclick="() => showFollowUpModal = false">Cancel</button>
+                <button class="btn-primary-glass" @onclick="SaveFollowUp" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-sm"></span> }
+                    Save Follow-Up
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Customer> customers = new();
+    private string? salesmanId;
+    private string searchText = "";
+    private string filterStatus = "";
+    private bool isLoading = true;
+    private bool showFollowUpModal = false;
+    private bool isSaving = false;
+    private Customer? selectedCustomer;
+    private DateTime followUpDate = DateTime.Today;
+    private DateTime? nextFollowUpDate;
+    private string followUpStatus = "Interested";
+    private string followUpRemarks = "";
+
+    [Inject] private FollowUpService FollowUpService { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = AuthService.GetCurrentUser()?.Id ?? "";
+        var salesman = await SalesmanService.GetSalesmanByUserIdAsync(userId);
+        salesmanId = salesman?.Id;
+        if (salesmanId != null)
+            customers = await CustomerService.GetCustomersBySalesmanAsync(salesmanId);
+        isLoading = false;
+    }
+
+    private IEnumerable<Customer> GetFiltered()
+        => customers
+            .Where(c => string.IsNullOrEmpty(searchText) ||
+                        c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Mobile ?? "").Contains(searchText))
+            .Where(c => string.IsNullOrEmpty(filterStatus) || c.Status == filterStatus);
+
+    private void OpenFollowUp(Customer c)
+    {
+        selectedCustomer = c;
+        followUpDate = DateTime.Today;
+        nextFollowUpDate = null;
+        followUpStatus = "Interested";
+        followUpRemarks = "";
+        showFollowUpModal = true;
+    }
+
+    private async Task SaveFollowUp()
+    {
+        if (selectedCustomer == null || salesmanId == null) return;
+        isSaving = true;
+        await FollowUpService.AddFollowUpAsync(new FollowUp
+        {
+            CustomerId = selectedCustomer.Id,
+            SalesmanId = salesmanId,
+            FollowUpDate = followUpDate.ToString("yyyy-MM-dd"),
+            Status = followUpStatus,
+            Remarks = followUpRemarks,
+            NextFollowUpDate = followUpStatus == "Follow-up Again" ? nextFollowUpDate?.ToString("yyyy-MM-dd") : null
+        });
+        isSaving = false;
+        showFollowUpModal = false;
+
+        if (followUpStatus == "Purchase Confirmed")
+            await CustomerService.UpdateCustomerStatusAsync(selectedCustomer.Id, "Converted");
+        else if (followUpStatus == "Not Interested")
+            await CustomerService.UpdateCustomerStatusAsync(selectedCustomer.Id, "Closed");
+
+        customers = await CustomerService.GetCustomersBySalesmanAsync(salesmanId!);
+    }
+}

@@ -1,0 +1,133 @@
+@page "/customer-entry"
+@attribute [Authorize(Roles = "Admin")]
+@inject CustomerService CustomerService
+@inject NavigationManager Nav
+
+<PageTitle>New Customer Entry — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-person-plus"></i> New Customer Entry</h1>
+</div>
+
+<div class="glass-card" style="max-width:700px;">
+    <div class="card-header">
+        <div class="card-title"><i class="bi bi-person-vcard"></i> Customer Details</div>
+    </div>
+    <div class="card-body">
+        @if (successMessage != null)
+        {
+            <div style="background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.25);border-radius:10px;padding:16px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start;">
+                <i class="bi bi-check-circle-fill text-success" style="font-size:20px;margin-top:1px;"></i>
+                <div>
+                    <div class="fw-600" style="color:#2ecc71;">Customer Added Successfully!</div>
+                    <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">@successMessage</div>
+                </div>
+            </div>
+        }
+
+        @if (errorMessage != null)
+        {
+            <div class="alert-error">
+                <i class="bi bi-exclamation-triangle-fill"></i> @errorMessage
+            </div>
+        }
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Customer Name *</label>
+                <input class="form-control" placeholder="Full name" @bind="customer.Name" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Mobile Number</label>
+                <input class="form-control" placeholder="10-digit mobile" @bind="customer.Mobile" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">City</label>
+                <input class="form-control" placeholder="City / Town" @bind="customer.City" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Visit Date</label>
+                <input type="date" class="form-control" @bind="visitDate" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Interested Product</label>
+            <input class="form-control" placeholder="e.g., Kanjivaram silk, blue color" @bind="customer.InterestedProduct" />
+        </div>
+        <div class="form-group">
+            <label class="form-label">Remarks</label>
+            <textarea class="form-control" rows="3" placeholder="Any additional notes..."
+                      @bind="customer.Remarks" style="resize:vertical;"></textarea>
+        </div>
+
+        <div style="background:rgba(201,162,39,0.06);border:1px solid rgba(201,162,39,0.15);border-radius:10px;padding:14px;margin-bottom:20px;">
+            <div style="font-size:12px;color:var(--text-gold);font-weight:600;margin-bottom:4px;">
+                <i class="bi bi-info-circle"></i> Auto-Assignment
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);">
+                A salesman will be automatically assigned using Round Robin — skipping absent salesmen.
+            </div>
+        </div>
+
+        <div class="d-flex gap-12">
+            <button class="btn-primary-glass" @onclick="SaveCustomer" disabled="@isSaving">
+                @if (isSaving)
+                {
+                    <span class="spinner-sm"></span>
+                }
+                <i class="bi bi-person-check"></i> Add Customer & Assign
+            </button>
+            <button class="btn-secondary-glass" @onclick="ResetForm">
+                <i class="bi bi-arrow-counterclockwise"></i> Reset
+            </button>
+            <a href="/admin/customers" class="btn-secondary-glass">
+                <i class="bi bi-list"></i> View All
+            </a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Customer customer = new();
+    private DateTime visitDate = DateTime.Today;
+    private string? successMessage;
+    private string? errorMessage;
+    private bool isSaving = false;
+
+    private async Task SaveCustomer()
+    {
+        successMessage = null;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(customer.Name))
+        {
+            errorMessage = "Customer name is required.";
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            customer.VisitDate = visitDate.ToString("yyyy-MM-dd");
+            var saved = await CustomerService.AddCustomerAsync(customer);
+            successMessage = $"Assigned to salesman successfully. Customer ID: {saved.Id[..8]}...";
+            ResetForm();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to add customer: " + ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        customer = new Customer();
+        visitDate = DateTime.Today;
+    }
+}

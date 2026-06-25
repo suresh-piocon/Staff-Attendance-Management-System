@@ -1,0 +1,32 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using SalesmanAttendance.Shared
+
+<Router AppAssembly="typeof(App).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(SalesmanAttendance.Layout.MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <RedirectToLogin />
+                }
+                else
+                {
+                    <div style="padding:40px;text-align:center;color:#e74c3c;">
+                        You are not authorized to view this page.
+                    </div>
+                }
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="typeof(SalesmanAttendance.Layout.MainLayout)">
+            <div class="not-found-container">
+                <h1>404</h1>
+                <p>Page not found.</p>
+                <a href="/" class="btn-primary-glass">Go Home</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

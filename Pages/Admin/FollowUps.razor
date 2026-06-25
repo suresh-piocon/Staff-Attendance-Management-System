@@ -1,0 +1,115 @@
+@page "/admin/followups"
+@attribute [Authorize(Roles = "Admin")]
+@inject FollowUpService FollowUpService
+@inject SalesmanService SalesmanService
+@inject CustomerService CustomerService
+
+<PageTitle>Follow-Ups — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-bell"></i> All Follow-Ups</h1>
+    <div class="page-header-actions">
+        <button class="btn-secondary-glass btn-sm" @onclick="LoadData">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <select class="form-control" @bind="filterStatus">
+        <option value="">All Status</option>
+        <option>Interested</option>
+        <option>Not Interested</option>
+        <option>Purchase Confirmed</option>
+        <option>Follow-up Again</option>
+    </select>
+    <select class="form-control" @bind="filterSalesmanId">
+        <option value="">All Salesmen</option>
+        @foreach (var s in salesmen)
+        {
+            <option value="@s.Id">@s.Name</option>
+        }
+    </select>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+}
+else
+{
+    <div class="glass-card">
+        <div class="card-body" style="padding:0;">
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Salesman</th>
+                            <th>Follow-Up Date</th>
+                            <th>Status</th>
+                            <th>Next Follow-Up</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var filtered = followUps
+                                .Where(f => string.IsNullOrEmpty(filterStatus) || f.Status == filterStatus)
+                                .Where(f => string.IsNullOrEmpty(filterSalesmanId) || f.SalesmanId == filterSalesmanId);
+                        }
+                        @if (!filtered.Any())
+                        {
+                            <tr><td colspan="6"><div class="empty-state"><i class="bi bi-bell-slash"></i><p>No follow-ups found</p></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var f in filtered)
+                            {
+                                var custName = customers.FirstOrDefault(c => c.Id == f.CustomerId)?.Name ?? "Unknown";
+                                var salesmanName = salesmen.FirstOrDefault(s => s.Id == f.SalesmanId)?.Name ?? "Unknown";
+                                <tr>
+                                    <td class="fw-600">@custName</td>
+                                    <td class="text-gold">@salesmanName</td>
+                                    <td class="muted">@f.FollowUpDate</td>
+                                    <td><span class="badge badge-@GetStatusClass(f.Status)">@f.Status</span></td>
+                                    <td class="muted">@f.NextFollowUpDate</td>
+                                    <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@f.Remarks</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<FollowUp> followUps = new();
+    private List<Salesman> salesmen = new();
+    private List<Customer> customers = new();
+    private string filterStatus = "";
+    private string filterSalesmanId = "";
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        followUps = await FollowUpService.GetAllFollowUpsAsync();
+        salesmen = await SalesmanService.GetAllSalesmenAsync();
+        customers = await CustomerService.GetAllCustomersAsync();
+        isLoading = false;
+    }
+
+    private string GetStatusClass(string? status) => status switch
+    {
+        "Interested" => "interested",
+        "Not Interested" => "notinterested",
+        "Purchase Confirmed" => "confirmed",
+        "Follow-up Again" => "followup",
+        _ => "notmarked"
+    };
+}

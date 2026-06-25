@@ -1,0 +1,175 @@
+@page "/admin/reports"
+@attribute [Authorize(Roles = "Admin")]
+@inject ReportService ReportService
+@inject AttendanceService AttendanceService
+@inject SalesmanService SalesmanService
+
+<PageTitle>Reports — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-bar-chart-line"></i> Reports</h1>
+</div>
+
+<div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <button class="@TabClass("performance")" @onclick="@(() => activeTab = "performance")">Performance</button>
+    <button class="@TabClass("attendance")" @onclick="@(() => activeTab = "attendance")">Attendance</button>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+}
+else if (activeTab == "performance" && stats != null)
+{
+    <div class="glass-card mb-24">
+        <div class="card-header"><div class="card-title"><i class="bi bi-trophy"></i> Salesman Performance Summary</div></div>
+        <div class="card-body" style="padding:0;">
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Salesman</th>
+                            <th>Total Customers</th>
+                            <th>Converted</th>
+                            <th>Pending Follow-Ups</th>
+                            <th>Conversion %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in stats.SalesmanStats)
+                        {
+                            <tr>
+                                <td class="fw-600">@s.SalesmanName</td>
+                                <td>@s.TotalCustomers</td>
+                                <td class="text-success fw-600">@s.ConvertedCustomers</td>
+                                <td class="text-warning">@s.PendingFollowUps</td>
+                                <td>
+                                    <div class="performance-bar">
+                                        <div class="perf-bar-track">
+                                            <div class="perf-bar-fill" style="width:@(s.ConversionRate)%"></div>
+                                        </div>
+                                        <span style="font-size:12px;color:var(--gold);font-weight:700;min-width:40px;">@s.ConversionRate%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-grid">
+        <div class="kpi-card gold">
+            <div class="kpi-icon gold"><i class="bi bi-people"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@stats.SalesmanStats.Sum(s => s.TotalCustomers)</div>
+                <div class="kpi-label">Total Customers (All Time)</div>
+            </div>
+        </div>
+        <div class="kpi-card green">
+            <div class="kpi-icon green"><i class="bi bi-check-circle"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@stats.SalesmanStats.Sum(s => s.ConvertedCustomers)</div>
+                <div class="kpi-label">Total Converted</div>
+            </div>
+        </div>
+        <div class="kpi-card purple">
+            <div class="kpi-icon purple"><i class="bi bi-bell"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@stats.TotalPendingFollowUps</div>
+                <div class="kpi-label">Pending Follow-Ups</div>
+            </div>
+        </div>
+    </div>
+}
+else if (activeTab == "attendance")
+{
+    <div class="filter-bar">
+        <input type="month" class="form-control" style="max-width:180px;"
+               value="@selectedMonth"
+               @onchange="@(async e => { selectedMonth = e.Value?.ToString() ?? selectedMonth; await LoadAttendanceReport(); })" />
+        <select class="form-control"
+                @onchange="@(async e => { selectedSalesmanId = e.Value?.ToString() ?? ""; await LoadAttendanceReport(); })">
+            <option value="">All Salesmen</option>
+            @foreach (var s in salesmen)
+            {
+                <option value="@s.Id">@s.Name</option>
+            }
+        </select>
+    </div>
+
+    <div class="glass-card">
+        <div class="card-body" style="padding:0;">
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Salesman</th>
+                            <th>Status</th>
+                            <th>Check-In</th>
+                            <th>Check-Out</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!attendanceRecords.Any())
+                        {
+                            <tr><td colspan="5"><div class="empty-state"><i class="bi bi-calendar-x"></i><p>No records</p></div></td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var a in attendanceRecords)
+                            {
+                                var salesmanName = salesmen.FirstOrDefault(s => s.Id == a.SalesmanId)?.Name ?? a.SalesmanId;
+                                var statusClass = a.Status.Replace(" ", "").ToLower();
+                                var checkIn = a.CheckInTime?.ToLocalTime().ToString("hh:mm tt") ?? "--";
+                                var checkOut = a.CheckOutTime?.ToLocalTime().ToString("hh:mm tt") ?? "--";
+                                <tr>
+                                    <td class="muted">@a.Date</td>
+                                    <td class="fw-600">@salesmanName</td>
+                                    <td><span class="badge badge-@statusClass">@a.Status</span></td>
+                                    <td class="muted">@checkIn</td>
+                                    <td class="muted">@checkOut</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private AdminDashboardStats? stats;
+    private List<AttendanceRecord> attendanceRecords = new();
+    private List<Salesman> salesmen = new();
+    private string activeTab = "performance";
+    private string selectedMonth = DateTime.Today.ToString("yyyy-MM");
+    private string selectedSalesmanId = "";
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        salesmen = await SalesmanService.GetAllSalesmenAsync();
+        stats = await ReportService.GetAdminDashboardStatsAsync();
+        isLoading = false;
+    }
+
+    private async Task LoadAttendanceReport()
+    {
+        if (string.IsNullOrEmpty(selectedSalesmanId)) return;
+        var parts = selectedMonth.Split('-');
+        if (parts.Length == 2 && int.TryParse(parts[0], out int y) && int.TryParse(parts[1], out int m))
+        {
+            var from = new DateTime(y, m, 1);
+            var to = from.AddMonths(1).AddDays(-1);
+            attendanceRecords = await AttendanceService.GetAttendanceBySalesmanAsync(selectedSalesmanId, from, to);
+        }
+        StateHasChanged();
+    }
+
+    private string TabClass(string tab)
+        => tab == activeTab ? "btn-primary-glass btn-sm" : "btn-secondary-glass btn-sm";
+}

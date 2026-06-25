@@ -1,0 +1,43 @@
+@inherits LayoutComponentBase
+@using SalesmanAttendance.Shared
+@inject AuthService AuthService
+@inject NavigationManager Nav
+@inject SupabaseAuthStateProvider AuthStateProvider
+
+<AuthorizeView>
+    <Authorized>
+        <div class="app-layout">
+            <NavMenu />
+            <div class="main-content">
+                <header class="top-header">
+                    <div class="flex-1">
+                        <span style="font-size:13px; color:var(--text-muted);">@GetGreeting()</span>
+                    </div>
+                    <div class="d-flex align-center gap-12">
+                        <span style="font-size:12px; color:var(--text-secondary);">
+                            @DateTime.Now.ToString("dddd, dd MMMM yyyy")
+                        </span>
+                        <div style="width:1px;height:24px;background:var(--glass-border);"></div>
+                        <span style="font-size:12px; color:var(--text-gold); font-weight:600;">
+                            @context.User.Identity?.Name
+                        </span>
+                    </div>
+                </header>
+                <main class="page-content">
+                    @Body
+                </main>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string GetGreeting()
+    {
+        var hour = DateTime.Now.Hour;
+        return hour < 12 ? "Good Morning ☀️" : hour < 17 ? "Good Afternoon 🌤️" : "Good Evening 🌙";
+    }
+}

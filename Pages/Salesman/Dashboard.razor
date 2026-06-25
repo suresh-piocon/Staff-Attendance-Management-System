@@ -1,0 +1,226 @@
+@page "/salesman/dashboard"
+@attribute [Authorize(Roles = "Salesman")]
+@inject AttendanceService AttendanceService
+@inject CustomerService CustomerService
+@inject FollowUpService FollowUpService
+@inject AuthService AuthService
+@inject SalesmanService SalesmanService
+
+<PageTitle>My Dashboard — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-speedometer2"></i> My Dashboard</h1>
+    <div class="page-header-actions">
+        <button class="btn-secondary-glass btn-sm" @onclick="LoadData">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container"><span class="spinner-sm"></span> Loading dashboard...</div>
+}
+else
+{
+    <!-- Check-In / Check-Out Card -->
+    <div class="checkin-card">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">Today's Attendance</div>
+        <div class="checkin-time" id="live-clock">@currentTime</div>
+        <div class="checkin-date">@DateTime.Now.ToString("dddd, dd MMMM yyyy")</div>
+        <div class="d-flex gap-12" style="justify-content:center;">
+            @if (todayRecord == null || todayRecord.Status == "Absent")
+            {
+                <button class="btn-primary-glass" @onclick="CheckIn">
+                    <i class="bi bi-box-arrow-in-right"></i> Check In
+                </button>
+            }
+            else
+            {
+                <span class="badge badge-@GetStatusBadge(todayRecord.Status)" style="padding:8px 16px;font-size:13px;">
+                    <i class="bi bi-check-circle"></i> @todayRecord.Status
+                </span>
+                @if (todayRecord.CheckInTime.HasValue)
+                {
+                    <span style="font-size:12px;color:var(--text-secondary);align-self:center;">
+                        In: @todayRecord.CheckInTime.Value.ToLocalTime().ToString("hh:mm tt")
+                    </span>
+                }
+                @if (todayRecord.CheckOutTime == null)
+                {
+                    <button class="btn-secondary-glass btn-sm" @onclick="CheckOut">
+                        <i class="bi bi-box-arrow-right"></i> Check Out
+                    </button>
+                }
+                else
+                {
+                    <span style="font-size:12px;color:var(--text-secondary);align-self:center;">
+                        Out: @todayRecord.CheckOutTime.Value.ToLocalTime().ToString("hh:mm tt")
+                    </span>
+                }
+            }
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card blue">
+            <div class="kpi-icon blue"><i class="bi bi-person-plus"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@todayCustomers.Count</div>
+                <div class="kpi-label">Today's Customers</div>
+            </div>
+        </div>
+        <div class="kpi-card gold">
+            <div class="kpi-icon gold"><i class="bi bi-people"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@totalCustomers</div>
+                <div class="kpi-label">Total Assigned</div>
+            </div>
+        </div>
+        <div class="kpi-card purple">
+            <div class="kpi-icon purple"><i class="bi bi-bell"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@pendingFollowUps</div>
+                <div class="kpi-label">Pending Follow-Ups</div>
+            </div>
+        </div>
+        <div class="kpi-card rose">
+            <div class="kpi-icon rose"><i class="bi bi-calendar-event"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-value">@todayFollowUps.Count</div>
+                <div class="kpi-label">Today's Follow-Ups</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Today's Customers -->
+    @if (todayCustomers.Any())
+    {
+        <div class="glass-card mb-24">
+            <div class="card-header">
+                <div class="card-title"><i class="bi bi-person-plus"></i> Today's New Customers</div>
+            </div>
+            <div class="card-body" style="padding:0;">
+                <div class="data-table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Mobile</th>
+                                <th>City</th>
+                                <th>Product</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in todayCustomers)
+                            {
+                                <tr>
+                                    <td class="fw-600">@c.Name</td>
+                                    <td class="muted">@c.Mobile</td>
+                                    <td class="muted">@c.City</td>
+                                    <td class="muted">@c.InterestedProduct</td>
+                                    <td><span class="badge badge-@c.Status.ToLower()">@c.Status</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Today's Follow-Ups -->
+    @if (todayFollowUps.Any())
+    {
+        <div class="glass-card">
+            <div class="card-header">
+                <div class="card-title"><i class="bi bi-bell-fill text-warning"></i> Today's Follow-Ups</div>
+            </div>
+            <div class="card-body" style="padding:0;">
+                <div class="data-table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Mobile</th>
+                                <th>Status</th>
+                                <th>Remarks</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var f in todayFollowUps)
+                            {
+                                <tr>
+                                    <td class="fw-600">@f.CustomerId</td>
+                                    <td class="muted">—</td>
+                                    <td><span class="badge badge-followup">@f.Status</span></td>
+                                    <td class="muted">@f.Remarks</td>
+                                    <td>
+                                        <a href="/salesman/followups" class="btn-primary-glass btn-sm">
+                                            <i class="bi bi-pencil"></i> Update
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private AttendanceRecord? todayRecord;
+    private List<Customer> todayCustomers = new();
+    private List<FollowUp> todayFollowUps = new();
+    private int totalCustomers = 0;
+    private int pendingFollowUps = 0;
+    private bool isLoading = true;
+    private string? salesmanId;
+    private string currentTime = DateTime.Now.ToString("hh:mm:ss tt");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = AuthService.GetCurrentUser()?.Id ?? "";
+        var salesman = await SalesmanService.GetSalesmanByUserIdAsync(userId);
+        salesmanId = salesman?.Id;
+
+        if (salesmanId != null)
+            await LoadData();
+
+        isLoading = false;
+    }
+
+    private async Task LoadData()
+    {
+        if (salesmanId == null) return;
+        todayRecord = await AttendanceService.GetTodayRecordAsync(salesmanId);
+        todayCustomers = (await CustomerService.GetCustomersBySalesmanAsync(salesmanId))
+            .Where(c => c.VisitDate == DateTime.Today.ToString("yyyy-MM-dd")).ToList();
+        var allCustomers = await CustomerService.GetCustomersBySalesmanAsync(salesmanId);
+        totalCustomers = allCustomers.Count;
+        todayFollowUps = await FollowUpService.GetTodayFollowUpsAsync(salesmanId);
+        pendingFollowUps = await FollowUpService.GetPendingCountBySalesmanAsync(salesmanId);
+        currentTime = DateTime.Now.ToString("hh:mm:ss tt");
+    }
+
+    private async Task CheckIn()
+    {
+        if (salesmanId == null) return;
+        await AttendanceService.CheckInAsync(salesmanId);
+        todayRecord = await AttendanceService.GetTodayRecordAsync(salesmanId);
+    }
+
+    private async Task CheckOut()
+    {
+        if (salesmanId == null) return;
+        await AttendanceService.CheckOutAsync(salesmanId);
+        todayRecord = await AttendanceService.GetTodayRecordAsync(salesmanId);
+    }
+
+    private string GetStatusBadge(string status) => status.Replace(" ", "").ToLower();
+}

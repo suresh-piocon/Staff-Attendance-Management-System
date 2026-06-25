@@ -1,0 +1,114 @@
+@page "/admin/attendance"
+@attribute [Authorize(Roles = "Admin")]
+@inject SalesmanService SalesmanService
+@inject AttendanceService AttendanceService
+
+<PageTitle>Attendance — Silk Saree</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-calendar-check"></i> Attendance</h1>
+    <div class="page-header-actions">
+        <input type="date" class="form-control" style="max-width:180px;"
+               @bind="selectedDate" @bind:after="LoadData" />
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+}
+else
+{
+    <div class="d-flex gap-12 mb-24" style="flex-wrap:wrap;">
+        <div style="background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.2);border-radius:10px;padding:12px 20px;">
+            <span style="font-size:22px;font-weight:800;color:#2ecc71;">@rows.Count(r => r.Status == "Present")</span>
+            <div style="font-size:11px;color:var(--text-muted);">Present</div>
+        </div>
+        <div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:10px;padding:12px 20px;">
+            <span style="font-size:22px;font-weight:800;color:#e74c3c;">@rows.Count(r => r.Status == "Absent" || r.Status == "Not Marked")</span>
+            <div style="font-size:11px;color:var(--text-muted);">Absent</div>
+        </div>
+        <div style="background:rgba(243,156,18,0.08);border:1px solid rgba(243,156,18,0.2);border-radius:10px;padding:12px 20px;">
+            <span style="font-size:22px;font-weight:800;color:#f39c12;">@rows.Count(r => r.Status == "Half Day")</span>
+            <div style="font-size:11px;color:var(--text-muted);">Half Day</div>
+        </div>
+        <div style="background:rgba(52,152,219,0.08);border:1px solid rgba(52,152,219,0.2);border-radius:10px;padding:12px 20px;">
+            <span style="font-size:22px;font-weight:800;color:#3498db;">@rows.Count(r => r.Status == "Leave")</span>
+            <div style="font-size:11px;color:var(--text-muted);">Leave</div>
+        </div>
+        <button class="btn-primary-glass" style="margin-left:auto;" @onclick="SaveAll" disabled="@isSaving">
+            @if (isSaving) { <span class="spinner-sm"></span> } <i class="bi bi-check2-all"></i> Save All
+        </button>
+    </div>
+
+    <div class="attendance-grid">
+        @foreach (var (salesman, i) in salesmen.Select((s, i) => (s, i)))
+        {
+            var avatarColors = new[] { "gold", "crimson", "blue", "green", "purple" };
+            var color = avatarColors[i % avatarColors.Length];
+            var rec = rows.FirstOrDefault(r => r.SalesmanId == salesman.Id);
+            var currentStatus = attendanceMap.ContainsKey(salesman.Id) ? attendanceMap[salesman.Id] : (rec?.Status ?? "Absent");
+
+            <div class="attendance-row">
+                <div class="salesman-avatar-sm avatar-@color">@salesman.Name[0]</div>
+                <div class="attendance-salesman-info">
+                    <div class="attendance-salesman-name">@salesman.Name</div>
+                    <div class="attendance-salesman-mobile">@salesman.Mobile</div>
+                </div>
+                <div class="status-radio-group">
+                    @foreach (var status in new[] { "Present", "Absent", "Half Day", "Leave" })
+                    {
+                        var cssClass = status.Replace(" ", "").ToLower();
+                        var uid = $"status-{salesman.Id}-{cssClass}";
+                        <input type="radio" class="status-radio" name="att-@salesman.Id" id="@uid"
+                               checked="@(currentStatus == status)"
+                               @onchange="() => SetStatus(salesman.Id, status)" />
+                        <label class="status-label @cssClass" for="@uid">@status</label>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Salesman> salesmen = new();
+    private List<AttendanceRecord> rows = new();
+    private Dictionary<string, string> attendanceMap = new();
+    private DateTime selectedDate = DateTime.Today;
+    private bool isLoading = true;
+    private bool isSaving = false;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        salesmen = await SalesmanService.GetActiveSalesmenAsync();
+        rows = await AttendanceService.GetAttendanceByDateAsync(selectedDate);
+        attendanceMap = new Dictionary<string, string>();
+        foreach (var s in salesmen)
+        {
+            var rec = rows.FirstOrDefault(r => r.SalesmanId == s.Id);
+            attendanceMap[s.Id] = rec?.Status ?? "Absent";
+        }
+        isLoading = false;
+    }
+
+    private void SetStatus(string salesmanId, string status)
+    {
+        attendanceMap[salesmanId] = status;
+    }
+
+    private async Task SaveAll()
+    {
+        isSaving = true;
+        foreach (var (sid, status) in attendanceMap)
+        {
+            // Temporarily switch to the selected date for saving
+            await AttendanceService.MarkAttendanceForDateAsync(sid, selectedDate, status);
+        }
+        isSaving = false;
+        await LoadData();
+    }
+}
