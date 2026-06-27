@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Postgrest.Attributes;
 using Postgrest.Models;
 using System;
@@ -13,27 +14,24 @@ namespace SalesmanAttendance.Models
         [Column("customer_id")]
         public string CustomerId { get; set; } = string.Empty;
 
-        [Column("salesman_id")]
-        public string SalesmanId { get; set; } = string.Empty;
+        [Column("staff_id")]
+        public string StaffId { get; set; } = string.Empty;
 
         [Column("followup_date")]
         public string FollowUpDate { get; set; } = DateTime.Today.ToString("yyyy-MM-dd");
 
-        [Column("status")]
-        public string? Status { get; set; }
-
         [Column("remarks")]
         public string? Remarks { get; set; }
 
-        [Column("next_followup_date")]
-        public string? NextFollowUpDate { get; set; }
+        [Column("status")]
+        public string Status { get; set; } = "Follow-up Pending"; // New, Follow-up Pending, Interested, Not Interested, Converted, Sale Closed
 
         [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        // Display fields
-        public string CustomerName { get; set; } = string.Empty;
-        public string SalesmanName { get; set; } = string.Empty;
-        public string CustomerMobile { get; set; } = string.Empty;
+        // Joined display fields — NOT real DB columns
+        [JsonIgnore] public string CustomerName { get; set; } = string.Empty;
+        [JsonIgnore] public string StaffName { get; set; } = string.Empty;
+        [JsonIgnore] public string CustomerMobile { get; set; } = string.Empty;
     }
 }

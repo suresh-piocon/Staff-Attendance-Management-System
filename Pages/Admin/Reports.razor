@@ -1,8 +1,7 @@
 @page "/admin/reports"
 @attribute [Authorize(Roles = "Admin")]
 @inject ReportService ReportService
-@inject AttendanceService AttendanceService
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 
 <PageTitle>Reports — Silk Saree</PageTitle>
 
@@ -11,126 +10,82 @@
 </div>
 
 <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
-    <button class="@TabClass("performance")" @onclick="@(() => activeTab = "performance")">Performance</button>
-    <button class="@TabClass("attendance")" @onclick="@(() => activeTab = "attendance")">Attendance</button>
+    <button class="@TabClass("attendance")" @onclick="@(() => SetActiveTab("attendance"))">Attendance Reports</button>
+    <button class="@TabClass("roundrobin")" @onclick="@(() => SetActiveTab("roundrobin"))">Round Robin Reports</button>
 </div>
 
 @if (isLoading)
 {
-    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
-}
-else if (activeTab == "performance" && stats != null)
-{
-    <div class="glass-card mb-24">
-        <div class="card-header"><div class="card-title"><i class="bi bi-trophy"></i> Salesman Performance Summary</div></div>
-        <div class="card-body" style="padding:0;">
-            <div class="data-table-wrapper">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Salesman</th>
-                            <th>Total Customers</th>
-                            <th>Converted</th>
-                            <th>Pending Follow-Ups</th>
-                            <th>Conversion %</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var s in stats.SalesmanStats)
-                        {
-                            <tr>
-                                <td class="fw-600">@s.SalesmanName</td>
-                                <td>@s.TotalCustomers</td>
-                                <td class="text-success fw-600">@s.ConvertedCustomers</td>
-                                <td class="text-warning">@s.PendingFollowUps</td>
-                                <td>
-                                    <div class="performance-bar">
-                                        <div class="perf-bar-track">
-                                            <div class="perf-bar-fill" style="width:@(s.ConversionRate)%"></div>
-                                        </div>
-                                        <span style="font-size:12px;color:var(--gold);font-weight:700;min-width:40px;">@s.ConversionRate%</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="kpi-grid">
-        <div class="kpi-card gold">
-            <div class="kpi-icon gold"><i class="bi bi-people"></i></div>
-            <div class="kpi-body">
-                <div class="kpi-value">@stats.SalesmanStats.Sum(s => s.TotalCustomers)</div>
-                <div class="kpi-label">Total Customers (All Time)</div>
-            </div>
-        </div>
-        <div class="kpi-card green">
-            <div class="kpi-icon green"><i class="bi bi-check-circle"></i></div>
-            <div class="kpi-body">
-                <div class="kpi-value">@stats.SalesmanStats.Sum(s => s.ConvertedCustomers)</div>
-                <div class="kpi-label">Total Converted</div>
-            </div>
-        </div>
-        <div class="kpi-card purple">
-            <div class="kpi-icon purple"><i class="bi bi-bell"></i></div>
-            <div class="kpi-body">
-                <div class="kpi-value">@stats.TotalPendingFollowUps</div>
-                <div class="kpi-label">Pending Follow-Ups</div>
-            </div>
-        </div>
-    </div>
+    <div class="loading-container"><span class="spinner-sm"></span> Loading reports...</div>
 }
 else if (activeTab == "attendance")
 {
-    <div class="filter-bar">
-        <input type="month" class="form-control" style="max-width:180px;"
-               value="@selectedMonth"
-               @onchange="@(async e => { selectedMonth = e.Value?.ToString() ?? selectedMonth; await LoadAttendanceReport(); })" />
-        <select class="form-control"
-                @onchange="@(async e => { selectedSalesmanId = e.Value?.ToString() ?? ""; await LoadAttendanceReport(); })">
-            <option value="">All Salesmen</option>
-            @foreach (var s in salesmen)
-            {
-                <option value="@s.Id">@s.Name</option>
-            }
-        </select>
+    <!-- Attendance Reports Panel -->
+    <div class="glass-card mb-24">
+        <div class="card-header">
+            <div class="card-title"><i class="bi bi-filter"></i> Attendance Report Filters</div>
+        </div>
+        <div class="card-body">
+            <div class="d-flex gap-12" style="flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group mb-0">
+                    <label class="form-label" style="font-size:11px;">From Date</label>
+                    <input type="date" class="form-control" @bind="fromDate" style="max-width:180px;" />
+                </div>
+                <div class="form-group mb-0">
+                    <label class="form-label" style="font-size:11px;">To Date</label>
+                    <input type="date" class="form-control" @bind="toDate" style="max-width:180px;" />
+                </div>
+                <button class="btn-primary-glass" @onclick="LoadAttendanceReport">
+                    <i class="bi bi-search"></i> Generate Report
+                </button>
+                <button class="btn-secondary-glass" @onclick='() => SetDateRangeQuick("week")'>This Week</button>
+                <button class="btn-secondary-glass" @onclick='() => SetDateRangeQuick("month")'>This Month</button>
+            </div>
+        </div>
     </div>
 
+    <!-- Attendance Summary Grid -->
     <div class="glass-card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="bi bi-calendar3"></i> Attendance Summary (@fromDate.ToString("yyyy-MM-dd") to @toDate.ToString("yyyy-MM-dd"))
+            </div>
+        </div>
         <div class="card-body" style="padding:0;">
             <div class="data-table-wrapper">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Salesman</th>
-                            <th>Status</th>
-                            <th>Check-In</th>
-                            <th>Check-Out</th>
+                            <th>Staff Code</th>
+                            <th>Staff Name</th>
+                            <th>Working Days</th>
+                            <th>Present Days</th>
+                            <th>Half Days</th>
+                            <th>Absent Days</th>
+                            <th>Late Arrival</th>
+                            <th>Early Leaving</th>
+                            <th>Total Hours</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @if (!attendanceRecords.Any())
+                        @if (!attendanceSummary.Any())
                         {
-                            <tr><td colspan="5"><div class="empty-state"><i class="bi bi-calendar-x"></i><p>No records</p></div></td></tr>
+                            <tr><td colspan="9"><div class="empty-state"><i class="bi bi-calendar-x"></i><p>No records generated. Set filters and click search.</p></div></td></tr>
                         }
                         else
                         {
-                            @foreach (var a in attendanceRecords)
+                            @foreach (var item in attendanceSummary)
                             {
-                                var salesmanName = salesmen.FirstOrDefault(s => s.Id == a.SalesmanId)?.Name ?? a.SalesmanId;
-                                var statusClass = a.Status.Replace(" ", "").ToLower();
-                                var checkIn = a.CheckInTime?.ToLocalTime().ToString("hh:mm tt") ?? "--";
-                                var checkOut = a.CheckOutTime?.ToLocalTime().ToString("hh:mm tt") ?? "--";
                                 <tr>
-                                    <td class="muted">@a.Date</td>
-                                    <td class="fw-600">@salesmanName</td>
-                                    <td><span class="badge badge-@statusClass">@a.Status</span></td>
-                                    <td class="muted">@checkIn</td>
-                                    <td class="muted">@checkOut</td>
+                                    <td class="text-gold fw-600">@item.StaffCode</td>
+                                    <td class="fw-600">@item.StaffName</td>
+                                    <td class="fw-600">@item.WorkingDays</td>
+                                    <td class="text-success fw-600">@item.Present</td>
+                                    <td class="text-warning">@item.HalfDay</td>
+                                    <td class="text-danger">@item.Absent</td>
+                                    <td class="text-info">@item.Late</td>
+                                    <td class="text-purple">@item.EarlyOut</td>
+                                    <td class="fw-600">@item.TotalHours.ToString("F1") hrs</td>
                                 </tr>
                             }
                         }
@@ -140,36 +95,208 @@ else if (activeTab == "attendance")
         </div>
     </div>
 }
+else if (activeTab == "roundrobin")
+{
+    <!-- Round Robin Reports Panel -->
+    <div style="display:flex;gap:12px;margin-bottom:20px;">
+        <button class="btn-sm @(rrSubTab == "daily" ? "btn-primary-glass" : "btn-secondary-glass")" @onclick="@(async () => { rrSubTab = "daily"; await LoadRoundRobinReport(); })">Daily Allocation</button>
+        <button class="btn-sm @(rrSubTab == "monthly" ? "btn-primary-glass" : "btn-secondary-glass")" @onclick="@(async () => { rrSubTab = "monthly"; await LoadRoundRobinReport(); })">Monthly Performance</button>
+    </div>
+
+    @if (rrSubTab == "daily")
+    {
+        <div class="glass-card mb-24" style="max-width:400px;">
+            <div class="card-body">
+                <div class="d-flex gap-12 align-items-end">
+                    <div class="form-group mb-0">
+                        <label class="form-label" style="font-size:11px;">Select Date</label>
+                        <input type="date" class="form-control" @bind="rrDailyDate" @bind:after="LoadRoundRobinReport" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card" style="max-width:600px;">
+            <div class="card-header">
+                <div class="card-title"><i class="bi bi-person-check"></i> Daily Customer Allocation (@rrDailyDate.ToString("yyyy-MM-dd"))</div>
+            </div>
+            <div class="card-body" style="padding:0;">
+                <div class="data-table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Staff Code</th>
+                                <th>Staff Name</th>
+                                <th>Customers Assigned</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!dailyAllocations.Any())
+                            {
+                                <tr><td colspan="3"><div class="empty-state"><i class="bi bi-people-fill"></i><p>No customers assigned today.</p></div></td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var item in dailyAllocations)
+                                {
+                                    <tr>
+                                        <td class="text-gold fw-600">@item.StaffCode</td>
+                                        <td class="fw-600">@item.StaffName</td>
+                                        <td class="text-info fw-600" style="font-size:15px;">@item.CustomersAssigned</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="glass-card mb-24">
+            <div class="card-body">
+                <div class="d-flex gap-12 align-items-end">
+                    <div class="form-group mb-0">
+                        <label class="form-label" style="font-size:11px;">Select Month</label>
+                        <input type="month" class="form-control" value="@rrMonthlyDate" @onchange="OnMonthlyDateChanged" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="card-header">
+                <div class="card-title"><i class="bi bi-trophy"></i> Monthly Sales & Conversion Performance</div>
+            </div>
+            <div class="card-body" style="padding:0;">
+                <div class="data-table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Staff Name</th>
+                                <th>Customers Assigned</th>
+                                <th>Converted / Sale Closed</th>
+                                <th>Conversion Rate</th>
+                                <th>Sales Value (INR)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!monthlyPerformance.Any())
+                            {
+                                <tr><td colspan="5"><div class="empty-state"><i class="bi bi-bar-chart"></i><p>No records for this month.</p></div></td></tr>
+                            }
+                            else
+                            {
+                                @foreach (var item in monthlyPerformance)
+                                {
+                                    <tr>
+                                        <td class="fw-600">@item.StaffName</td>
+                                        <td class="text-info">@item.TotalCustomers</td>
+                                        <td class="text-success fw-600">@item.ConvertedCustomers</td>
+                                        <td>
+                                            <div class="performance-bar">
+                                                <div class="perf-bar-track">
+                                                    <div class="perf-bar-fill" style="width:@(item.ConversionRate)%"></div>
+                                                </div>
+                                                <span style="font-size:12px;color:var(--gold);font-weight:700;min-width:40px;">@item.ConversionRate%</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-gold fw-600" style="font-size:14px;">₹@(item.TotalSales.ToString("N0"))</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
 
 @code {
-    private AdminDashboardStats? stats;
-    private List<AttendanceRecord> attendanceRecords = new();
-    private List<Salesman> salesmen = new();
-    private string activeTab = "performance";
-    private string selectedMonth = DateTime.Today.ToString("yyyy-MM");
-    private string selectedSalesmanId = "";
+    private string activeTab = "attendance";
+    private string rrSubTab = "daily";
     private bool isLoading = true;
+
+    // Attendance dates
+    private DateTime fromDate = DateTime.Today.AddDays(-6);
+    private DateTime toDate = DateTime.Today;
+    private List<AttendanceSummaryItem> attendanceSummary = new();
+
+    // Round robin date parameters
+    private DateTime rrDailyDate = DateTime.Today;
+    private string rrMonthlyDate = DateTime.Today.ToString("yyyy-MM");
+    private List<DailyAllocationItem> dailyAllocations = new();
+    private List<StaffPerformance> monthlyPerformance = new();
 
     protected override async Task OnInitializedAsync()
     {
-        salesmen = await SalesmanService.GetAllSalesmenAsync();
-        stats = await ReportService.GetAdminDashboardStatsAsync();
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        if (activeTab == "attendance")
+        {
+            await LoadAttendanceReport();
+        }
+        else
+        {
+            await LoadRoundRobinReport();
+        }
         isLoading = false;
+    }
+
+    private async Task SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        await LoadData();
     }
 
     private async Task LoadAttendanceReport()
     {
-        if (string.IsNullOrEmpty(selectedSalesmanId)) return;
-        var parts = selectedMonth.Split('-');
-        if (parts.Length == 2 && int.TryParse(parts[0], out int y) && int.TryParse(parts[1], out int m))
+        attendanceSummary = await ReportService.GetAttendanceSummaryAsync(fromDate, toDate);
+    }
+
+    private async Task SetDateRangeQuick(string option)
+    {
+        if (option == "week")
         {
-            var from = new DateTime(y, m, 1);
-            var to = from.AddMonths(1).AddDays(-1);
-            attendanceRecords = await AttendanceService.GetAttendanceBySalesmanAsync(selectedSalesmanId, from, to);
+            fromDate = DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek + 1); // Monday
+            toDate = DateTime.Today;
         }
-        StateHasChanged();
+        else if (option == "month")
+        {
+            fromDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            toDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, DateTime.DaysInMonth(DateTime.Today.Year, DateTime.Today.Month));
+        }
+        await LoadAttendanceReport();
+    }
+
+    private async Task LoadRoundRobinReport()
+    {
+        if (rrSubTab == "daily")
+        {
+            dailyAllocations = await ReportService.GetDailyAllocationReportAsync(rrDailyDate);
+        }
+        else
+        {
+            var parts = rrMonthlyDate.Split('-');
+            if (parts.Length == 2 && int.TryParse(parts[0], out int y) && int.TryParse(parts[1], out int m))
+            {
+                monthlyPerformance = await ReportService.GetMonthlyPerformanceReportAsync(y, m);
+            }
+        }
+    }
+
+    private async Task OnMonthlyDateChanged(ChangeEventArgs e)
+    {
+        rrMonthlyDate = e.Value?.ToString() ?? rrMonthlyDate;
+        await LoadRoundRobinReport();
     }
 
     private string TabClass(string tab)
-        => tab == activeTab ? "btn-primary-glass btn-sm" : "btn-secondary-glass btn-sm";
+        => tab == activeTab ? "btn-primary-glass" : "btn-secondary-glass";
 }

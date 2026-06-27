@@ -1,21 +1,27 @@
 @page "/admin/attendance"
 @attribute [Authorize(Roles = "Admin")]
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 @inject AttendanceService AttendanceService
 
 <PageTitle>Attendance — Silk Saree</PageTitle>
 
 <div class="page-header">
-    <h1><i class="bi bi-calendar-check"></i> Attendance</h1>
-    <div class="page-header-actions">
+    <h1><i class="bi bi-calendar-check"></i> Staff Attendance</h1>
+    <div class="page-header-actions d-flex gap-8">
         <input type="date" class="form-control" style="max-width:180px;"
                @bind="selectedDate" @bind:after="LoadData" />
+        <button class="btn-secondary-glass" @onclick="() => showImportModal = true">
+            <i class="bi bi-file-earmark-arrow-up"></i> Import CSV
+        </button>
+        <button class="btn-secondary-glass" @onclick="() => showSimulationModal = true">
+            <i class="bi bi-cpu"></i> Simulate Push
+        </button>
     </div>
 </div>
 
 @if (!string.IsNullOrEmpty(errorMessage))
 {
-    <div style="background:rgba(231,76,60,0.15);border:1px solid rgba(231,76,60,0.4);border-radius:10px;padding:14px 20px;margin-bottom:16px;color:#e74c3c;display:flex;align-items:center;gap:10px;">
+    <div class="alert-error mb-16">
         <i class="bi bi-exclamation-triangle-fill"></i>
         <span><strong>Save failed:</strong> @errorMessage</span>
         <button @onclick='() => errorMessage = string.Empty' style="margin-left:auto;background:none;border:none;color:#e74c3c;cursor:pointer;"><i class="bi bi-x-lg"></i></button>
@@ -26,112 +32,261 @@
 {
     <div style="background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.4);border-radius:10px;padding:14px 20px;margin-bottom:16px;color:#2ecc71;display:flex;align-items:center;gap:10px;">
         <i class="bi bi-check-circle-fill"></i>
-        <span>Attendance saved successfully!</span>
+        <span>Attendance updated successfully! Statuses recalculated.</span>
     </div>
 }
 
 @if (isLoading)
 {
-    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+    <div class="loading-container"><span class="spinner-sm"></span> Loading attendance logs...</div>
 }
 else
 {
+    <!-- Summaries -->
     <div class="d-flex gap-12 mb-24" style="flex-wrap:wrap;">
         <div style="background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.2);border-radius:10px;padding:12px 20px;">
-            <span style="font-size:22px;font-weight:800;color:#2ecc71;">@rows.Count(r => r.Status == "Present")</span>
+            <span style="font-size:22px;font-weight:800;color:#2ecc71;">@gridRows.Count(r => r.Record.Status == "Present")</span>
             <div style="font-size:11px;color:var(--text-muted);">Present</div>
         </div>
         <div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:10px;padding:12px 20px;">
-            <span style="font-size:22px;font-weight:800;color:#e74c3c;">@rows.Count(r => r.Status == "Absent" || r.Status == "Not Marked")</span>
+            <span style="font-size:22px;font-weight:800;color:#e74c3c;">@gridRows.Count(r => r.Record.Status == "Absent")</span>
             <div style="font-size:11px;color:var(--text-muted);">Absent</div>
         </div>
         <div style="background:rgba(243,156,18,0.08);border:1px solid rgba(243,156,18,0.2);border-radius:10px;padding:12px 20px;">
-            <span style="font-size:22px;font-weight:800;color:#f39c12;">@rows.Count(r => r.Status == "Half Day")</span>
+            <span style="font-size:22px;font-weight:800;color:#f39c12;">@gridRows.Count(r => r.Record.Status == "Half Day")</span>
             <div style="font-size:11px;color:var(--text-muted);">Half Day</div>
         </div>
         <div style="background:rgba(52,152,219,0.08);border:1px solid rgba(52,152,219,0.2);border-radius:10px;padding:12px 20px;">
-            <span style="font-size:22px;font-weight:800;color:#3498db;">@rows.Count(r => r.Status == "Leave")</span>
-            <div style="font-size:11px;color:var(--text-muted);">Leave</div>
+            <span style="font-size:22px;font-weight:800;color:#3498db;">@gridRows.Count(r => r.Record.Status == "Late")</span>
+            <div style="font-size:11px;color:var(--text-muted);">Late</div>
         </div>
-        <button class="btn-primary-glass" style="margin-left:auto;" @onclick="SaveAll" disabled="@isSaving">
-            @if (isSaving) { <span class="spinner-sm"></span> } <i class="bi bi-check2-all"></i> Save All
+        <div style="background:rgba(155,89,182,0.08);border:1px solid rgba(155,89,182,0.2);border-radius:10px;padding:12px 20px;">
+            <span style="font-size:22px;font-weight:800;color:#9b59b6;">@gridRows.Count(r => r.Record.Status == "Early Out")</span>
+            <div style="font-size:11px;color:var(--text-muted);">Early Out</div>
+        </div>
+        <button class="btn-primary-glass" style="margin-left:auto;" @onclick="SaveAllManual" disabled="@isSaving">
+            @if (isSaving) { <span class="spinner-sm"></span> } <i class="bi bi-save"></i> Save Changes
         </button>
     </div>
 
-    <div class="attendance-grid">
-        @foreach (var (salesman, i) in salesmen.Select((s, i) => (s, i)))
-        {
-            var avatarColors = new[] { "gold", "crimson", "blue", "green", "purple" };
-            var color = avatarColors[i % avatarColors.Length];
-            var rec = rows.FirstOrDefault(r => r.SalesmanId == salesman.Id);
-            var currentStatus = attendanceMap.ContainsKey(salesman.Id) ? attendanceMap[salesman.Id] : (rec?.Status ?? "Absent");
+    <!-- Attendance Grid -->
+    <div class="glass-card">
+        <div class="card-body" style="padding:0;">
+            <div class="data-table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Staff Code</th>
+                            <th>Staff Name</th>
+                            <th>Morning In (09:00 AM)</th>
+                            <th>Morning Out (01:30 PM)</th>
+                            <th>Afternoon In (02:00 PM)</th>
+                            <th>Evening Out (07:00 PM)</th>
+                            <th>Auto Status</th>
+                            <th>Total Hours</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in gridRows)
+                        {
+                            var statusClass = row.Record.Status.Replace(" ", "").ToLower();
+                            <tr>
+                                <td class="text-gold fw-600">@row.Staff.StaffCode</td>
+                                <td class="fw-600">@row.Staff.Name</td>
+                                <td>
+                                    <input type="time" class="form-control form-control-sm text-center" style="max-width:120px;display:inline-block;"
+                                           value="@FormatTime(row.Record.MorningIn)"
+                                           @onchange="@(e => { row.Record.MorningIn = ParseTime(selectedDate, e.Value?.ToString()); RecalculateRow(row); })" />
+                                </td>
+                                <td>
+                                    <input type="time" class="form-control form-control-sm text-center" style="max-width:120px;display:inline-block;"
+                                           value="@FormatTime(row.Record.MorningOut)"
+                                           @onchange="@(e => { row.Record.MorningOut = ParseTime(selectedDate, e.Value?.ToString()); RecalculateRow(row); })" />
+                                </td>
+                                <td>
+                                    <input type="time" class="form-control form-control-sm text-center" style="max-width:120px;display:inline-block;"
+                                           value="@FormatTime(row.Record.AfternoonIn)"
+                                           @onchange="@(e => { row.Record.AfternoonIn = ParseTime(selectedDate, e.Value?.ToString()); RecalculateRow(row); })" />
+                                </td>
+                                <td>
+                                    <input type="time" class="form-control form-control-sm text-center" style="max-width:120px;display:inline-block;"
+                                           value="@FormatTime(row.Record.EveningOut)"
+                                           @onchange="@(e => { row.Record.EveningOut = ParseTime(selectedDate, e.Value?.ToString()); RecalculateRow(row); })" />
+                                </td>
+                                <td>
+                                    <span class="badge badge-@statusClass">@row.Record.Status</span>
+                                </td>
+                                <td class="fw-600">@row.Record.TotalHours hrs</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
 
-            <div class="attendance-row">
-                <div class="salesman-avatar-sm avatar-@color">@salesman.Name[0]</div>
-                <div class="attendance-salesman-info">
-                    <div class="attendance-salesman-name">@salesman.Name</div>
-                    <div class="attendance-salesman-mobile">@salesman.Mobile</div>
-                </div>
-                <div class="status-radio-group">
-                    @foreach (var status in new[] { "Present", "Absent", "Half Day", "Leave" })
-                    {
-                        var cssClass = status.Replace(" ", "").ToLower();
-                        var uid = $"status-{salesman.Id}-{cssClass}";
-                        <input type="radio" class="status-radio" name="att-@salesman.Id" id="@uid"
-                               checked="@(currentStatus == status)"
-                               @onchange="() => SetStatus(salesman.Id, status)" />
-                        <label class="status-label @cssClass" for="@uid">@status</label>
-                    }
+<!-- CSV Import Modal (Option 2) -->
+@if (showImportModal)
+{
+    <div class="modal-overlay" @onclick:stopPropagation>
+        <div class="modal-box" style="max-width:600px;">
+            <div class="modal-header">
+                <h3><i class="bi bi-file-earmark-arrow-up"></i> Import Daily Attendance CSV</h3>
+                <button class="modal-close" @onclick="() => showImportModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+                    Paste CSV data here. The format should be:<br />
+                    <code>StaffCode/FingerprintID, Date(yyyy-MM-dd), MorningIn, MorningOut, AfternoonIn, EveningOut</code><br />
+                    <em>Example:</em><br />
+                    <code>S001, 2026-06-27, 09:01 AM, 01:28 PM, 02:02 PM, 07:01 PM</code>
+                </p>
+                <div class="form-group">
+                    <label class="form-label">CSV Log Data</label>
+                    <textarea class="form-control" rows="8" placeholder="S001, 2026-06-27, 09:01, 13:28, 14:02, 19:01" @bind="csvContent" style="font-family:monospace;resize:vertical;"></textarea>
                 </div>
             </div>
-        }
+            <div class="modal-footer">
+                <button class="btn-secondary-glass" @onclick="() => showImportModal = false">Cancel</button>
+                <button class="btn-primary-glass" @onclick="ImportCsvLogs" disabled="@isImporting">
+                    @if (isImporting) { <span class="spinner-sm"></span> }
+                    Import Logs
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Fingerprint Push Simulation Modal (Option 1) -->
+@if (showSimulationModal)
+{
+    <div class="modal-overlay" @onclick:stopPropagation>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="bi bi-cpu"></i> Simulate Fingerprint Log Push</h3>
+                <button class="modal-close" @onclick="() => showSimulationModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Select Staff Member</label>
+                    <select class="form-control" @bind="simulatedStaffId">
+                        <option value="">-- Select Staff --</option>
+                        @foreach (var s in activeStaff)
+                        {
+                            <option value="@s.Id">@s.Name (@s.StaffCode / @s.FingerprintEmpId)</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Log Type (Session Entry)</label>
+                    <select class="form-control" @bind="simulatedLogType">
+                        <option value="MorningIn">Morning In (09:00 AM)</option>
+                        <option value="MorningOut">Morning Out (01:30 PM)</option>
+                        <option value="AfternoonIn">Afternoon In (02:00 PM)</option>
+                        <option value="EveningOut">Evening Out (07:00 PM)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Punch Time</label>
+                    <input type="time" class="form-control" @bind="simulatedTime" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary-glass" @onclick="() => showSimulationModal = false">Cancel</button>
+                <button class="btn-primary-glass" @onclick="SimulateDevicePush" disabled="@isSimulating">
+                    @if (isSimulating) { <span class="spinner-sm"></span> }
+                    Push Device Log
+                </button>
+            </div>
+        </div>
     </div>
 }
 
 @code {
-    private List<Salesman> salesmen = new();
-    private List<AttendanceRecord> rows = new();
-    private Dictionary<string, string> attendanceMap = new();
     private DateTime selectedDate = DateTime.Today;
+    private List<Staff> activeStaff = new();
+    private List<GridRowItem> gridRows = new();
     private bool isLoading = true;
     private bool isSaving = false;
     private string errorMessage = string.Empty;
     private bool saveSuccess = false;
 
-    protected override async Task OnInitializedAsync() => await LoadData();
+    // Modals
+    private bool showImportModal = false;
+    private string csvContent = string.Empty;
+    private bool isImporting = false;
+
+    private bool showSimulationModal = false;
+    private string simulatedStaffId = string.Empty;
+    private string simulatedLogType = "MorningIn";
+    private DateTime simulatedTime = DateTime.Now;
+    private bool isSimulating = false;
+
+    private class GridRowItem
+    {
+        public Staff Staff { get; set; } = new();
+        public AttendanceRecord Record { get; set; } = new();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
 
     private async Task LoadData()
     {
         isLoading = true;
-        errorMessage = string.Empty;
         saveSuccess = false;
-        salesmen = await SalesmanService.GetActiveSalesmenAsync();
-        rows = await AttendanceService.GetAttendanceByDateAsync(selectedDate);
-        attendanceMap = new Dictionary<string, string>();
-        foreach (var s in salesmen)
+        errorMessage = string.Empty;
+
+        activeStaff = await StaffService.GetActiveStaffAsync();
+        var records = await AttendanceService.GetAttendanceByDateAsync(selectedDate);
+
+        gridRows.Clear();
+        foreach (var s in activeStaff)
         {
-            var rec = rows.FirstOrDefault(r => r.SalesmanId == s.Id);
-            attendanceMap[s.Id] = rec?.Status ?? "Absent";
+            var record = records.FirstOrDefault(r => r.StaffId == s.Id);
+            if (record == null)
+            {
+                record = new AttendanceRecord
+                {
+                    StaffId = s.Id,
+                    AttendanceDate = selectedDate.ToString("yyyy-MM-dd"),
+                    Status = "Absent",
+                    TotalHours = 0
+                };
+            }
+            gridRows.Add(new GridRowItem
+            {
+                Staff = s,
+                Record = record
+            });
         }
+
         isLoading = false;
     }
 
-    private void SetStatus(string salesmanId, string status)
+    private void RecalculateRow(GridRowItem row)
     {
-        attendanceMap[salesmanId] = status;
+        var (status, hours) = AttendanceService.CalculateAttendanceStatus(
+            row.Record.MorningIn, row.Record.MorningOut, row.Record.AfternoonIn, row.Record.EveningOut);
+        row.Record.Status = status;
+        row.Record.TotalHours = hours;
         saveSuccess = false;
     }
 
-    private async Task SaveAll()
+    private async Task SaveAllManual()
     {
         isSaving = true;
         errorMessage = string.Empty;
         saveSuccess = false;
+
         try
         {
-            foreach (var (sid, status) in attendanceMap)
+            foreach (var row in gridRows)
             {
-                await AttendanceService.MarkAttendanceForDateAsync(sid, selectedDate, status);
+                await AttendanceService.SaveAttendanceRecordAsync(row.Record);
             }
             saveSuccess = true;
             await LoadData();
@@ -139,11 +294,100 @@ else
         catch (Exception ex)
         {
             errorMessage = ex.Message;
-            Console.Error.WriteLine($"[Attendance SaveAll] Error: {ex}");
         }
         finally
         {
             isSaving = false;
         }
+    }
+
+    private async Task ImportCsvLogs()
+    {
+        if (string.IsNullOrWhiteSpace(csvContent)) return;
+        isImporting = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            int count = await AttendanceService.ImportAttendanceCsvAsync(csvContent);
+            showImportModal = false;
+            csvContent = string.Empty;
+            saveSuccess = true;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "CSV Import Error: " + ex.Message;
+        }
+        finally
+        {
+            isImporting = false;
+        }
+    }
+
+    private async Task SimulateDevicePush()
+    {
+        if (string.IsNullOrEmpty(simulatedStaffId)) return;
+        isSimulating = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            // Get or create today's record
+            var record = await AttendanceService.GetRecordByStaffAndDateAsync(simulatedStaffId, selectedDate);
+            if (record == null)
+            {
+                record = new AttendanceRecord
+                {
+                    StaffId = simulatedStaffId,
+                    AttendanceDate = selectedDate.ToString("yyyy-MM-dd"),
+                    Status = "Absent",
+                    TotalHours = 0
+                };
+            }
+
+            // Combine selectedDate with simulatedTime
+            var localDt = new DateTime(selectedDate.Year, selectedDate.Month, selectedDate.Day, simulatedTime.Hour, simulatedTime.Minute, 0, DateTimeKind.Local);
+            var utcTime = localDt.ToUniversalTime();
+
+            switch (simulatedLogType)
+            {
+                case "MorningIn": record.MorningIn = utcTime; break;
+                case "MorningOut": record.MorningOut = utcTime; break;
+                case "AfternoonIn": record.AfternoonIn = utcTime; break;
+                case "EveningOut": record.EveningOut = utcTime; break;
+            }
+
+            await AttendanceService.SaveAttendanceRecordAsync(record);
+            showSimulationModal = false;
+            saveSuccess = true;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Push Simulation Error: " + ex.Message;
+        }
+        finally
+        {
+            isSimulating = false;
+        }
+    }
+
+    // Time input display mapping
+    private string FormatTime(DateTime? dt)
+    {
+        if (dt == null) return string.Empty;
+        return dt.Value.ToLocalTime().ToString("HH:mm");
+    }
+
+    private DateTime? ParseTime(DateTime date, string? timeStr)
+    {
+        if (string.IsNullOrWhiteSpace(timeStr)) return null;
+        if (TimeSpan.TryParse(timeStr, out TimeSpan ts))
+        {
+            var localDt = new DateTime(date.Year, date.Month, date.Day, ts.Hours, ts.Minutes, 0, DateTimeKind.Local);
+            return localDt.ToUniversalTime();
+        }
+        return null;
     }
 }

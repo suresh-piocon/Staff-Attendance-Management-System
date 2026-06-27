@@ -1,15 +1,15 @@
 @page "/admin/customers"
 @attribute [Authorize(Roles = "Admin")]
 @inject CustomerService CustomerService
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 
-<PageTitle>Customers — Silk Saree</PageTitle>
+<PageTitle>Customers Allocation Table — Silk Saree</PageTitle>
 
 <div class="page-header">
-    <h1><i class="bi bi-people-fill"></i> All Customers</h1>
+    <h1><i class="bi bi-people-fill"></i> Customer Allocation Table</h1>
     <div class="page-header-actions">
         <a href="/customer-entry" class="btn-primary-glass">
-            <i class="bi bi-plus-lg"></i> New Customer
+            <i class="bi bi-plus-lg"></i> New Customer Entry
         </a>
     </div>
 </div>
@@ -18,22 +18,25 @@
     <input class="form-control" placeholder="Search by name or mobile..." @bind="searchText" @bind:event="oninput" />
     <select class="form-control" @bind="filterStatus">
         <option value="">All Status</option>
-        <option value="Open">Open</option>
-        <option value="Closed">Closed</option>
+        <option value="New">New</option>
+        <option value="Follow-up Pending">Follow-up Pending</option>
+        <option value="Interested">Interested</option>
+        <option value="Not Interested">Not Interested</option>
         <option value="Converted">Converted</option>
+        <option value="Sale Closed">Sale Closed</option>
     </select>
-    <select class="form-control" @bind="filterSalesmanId">
-        <option value="">All Salesmen</option>
-        @foreach (var s in salesmen)
+    <select class="form-control" @bind="filterStaffId">
+        <option value="">All Staff</option>
+        @foreach (var s in staffList)
         {
-            <option value="@s.Id">@s.Name</option>
+            <option value="@s.Id">@s.Name (@s.StaffCode)</option>
         }
     </select>
 </div>
 
 @if (isLoading)
 {
-    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+    <div class="loading-container"><span class="spinner-sm"></span> Loading customer data...</div>
 }
 else
 {
@@ -43,49 +46,70 @@ else
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>#</th>
-                            <th>Customer</th>
+                            <th>Token</th>
+                            <th>Customer Name</th>
                             <th>Mobile</th>
                             <th>City</th>
-                            <th>Product</th>
                             <th>Visit Date</th>
                             <th>Assigned To</th>
+                            <th>Remarks</th>
+                            <th>Purchase Value</th>
                             <th>Status</th>
-                            <th>Action</th>
+                            <th>Update Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         @{
-                            var filtered = GetFiltered();
+                            var filtered = GetFiltered().ToList();
                         }
                         @if (!filtered.Any())
                         {
-                            <tr><td colspan="9"><div class="empty-state"><i class="bi bi-person-x"></i><p>No customers found</p></div></td></tr>
+                            <tr><td colspan="10"><div class="empty-state"><i class="bi bi-person-x"></i><p>No customer allocations found</p></div></td></tr>
                         }
                         else
                         {
-                            @foreach (var (c, idx) in filtered.Select((c, i) => (c, i + 1)))
+                            @foreach (var c in filtered)
                             {
+                                var token = GetTokenForCustomer(c);
+                                var statusClass = c.Status.Replace(" ", "").ToLower();
                                 <tr>
-                                    <td class="muted">@idx</td>
-                                    <td class="fw-600">@c.Name</td>
+                                    <td class="text-gold fw-600">Token #@token</td>
+                                    <td class="fw-600">@c.CustomerName</td>
                                     <td class="muted">@c.Mobile</td>
                                     <td class="muted">@c.City</td>
-                                    <td class="muted">@c.InterestedProduct</td>
                                     <td class="muted">@c.VisitDate</td>
                                     <td>
-                                        <span class="text-gold fw-600">
-                                            @(salesmen.FirstOrDefault(s => s.Id == c.AssignedSalesmanId)?.Name ?? "Unassigned")
+                                        <span class="text-info fw-600">
+                                            @(staffList.FirstOrDefault(s => s.Id == c.AssignedStaffId)?.Name ?? "Unassigned")
                                         </span>
                                     </td>
-                                    <td><span class="badge badge-@c.Status.ToLower()">@c.Status</span></td>
+                                    <td class="muted" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="@c.Remarks">
+                                        @c.Remarks
+                                    </td>
+                                    <td class="text-success fw-600">
+                                        ₹@(c.PurchaseValue.ToString("N0"))
+                                    </td>
                                     <td>
-                                        <select class="form-control" style="padding:4px 8px;font-size:12px;"
-                                                @onchange="@(async e => await UpdateStatus(c.Id, e.Value?.ToString() ?? string.Empty))">
-                                            <option value="Open" selected="@(c.Status=="Open")">Open</option>
-                                            <option value="Closed" selected="@(c.Status=="Closed")">Closed</option>
-                                            <option value="Converted" selected="@(c.Status=="Converted")">Converted</option>
-                                        </select>
+                                        <span class="badge badge-@statusClass">@c.Status</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex gap-4">
+                                            <select class="form-control form-control-sm" style="padding:2px 6px;font-size:11px;"
+                                                    @onchange="@(async e => await UpdateStatus(c.Id, e.Value?.ToString() ?? string.Empty))">
+                                                <option value="New" selected="@(c.Status=="New")">New</option>
+                                                <option value="Follow-up Pending" selected="@(c.Status=="Follow-up Pending")">Follow-up Pending</option>
+                                                <option value="Interested" selected="@(c.Status=="Interested")">Interested</option>
+                                                <option value="Not Interested" selected="@(c.Status=="Not Interested")">Not Interested</option>
+                                                <option value="Converted" selected="@(c.Status=="Converted")">Converted</option>
+                                                <option value="Sale Closed" selected="@(c.Status=="Sale Closed")">Sale Closed</option>
+                                            </select>
+                                            @if (c.Status == "Converted" || c.Status == "Sale Closed")
+                                            {
+                                                <button class="btn-secondary-glass btn-sm btn-icon" title="Enter Sale Value" @onclick="() => OpenSaleModal(c)">
+                                                    <i class="bi bi-currency-rupee text-success"></i>
+                                                </button>
+                                            }
+                                        </div>
                                     </td>
                                 </tr>
                             }
@@ -97,35 +121,107 @@ else
     </div>
 }
 
+<!-- Sale Value Modal -->
+@if (showSaleModal && selectedCustomer != null)
+{
+    <div class="modal-overlay" @onclick:stopPropagation>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="bi bi-currency-rupee"></i> Record Purchase Value</h3>
+                <button class="modal-close" @onclick="() => showSaleModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:var(--text-secondary);">
+                    Enter the total billing/purchase value for customer: <strong>@selectedCustomer.CustomerName</strong>.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Purchase Value (INR) *</label>
+                    <input type="number" class="form-control" placeholder="Enter amount in ₹" @bind="purchaseValueInput" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary-glass" @onclick="() => showSaleModal = false">Cancel</button>
+                <button class="btn-primary-glass" @onclick="SaveSaleValue">Save Sale</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<Customer> customers = new();
-    private List<Salesman> salesmen = new();
+    private List<Staff> staffList = new();
     private string searchText = "";
     private string filterStatus = "";
-    private string filterSalesmanId = "";
+    private string filterStaffId = "";
     private bool isLoading = true;
+
+    // Sale Value override
+    private bool showSaleModal = false;
+    private Customer? selectedCustomer;
+    private decimal purchaseValueInput = 0;
 
     protected override async Task OnInitializedAsync()
     {
-        salesmen = await SalesmanService.GetAllSalesmenAsync();
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        staffList = await StaffService.GetAllStaffAsync();
         customers = await CustomerService.GetAllCustomersAsync();
         isLoading = false;
+    }
+
+    private int GetTokenForCustomer(Customer c)
+    {
+        var dayCustomers = customers
+            .Where(x => x.VisitDate == c.VisitDate)
+            .OrderBy(x => x.CreatedAt)
+            .ToList();
+        int idx = dayCustomers.FindIndex(x => x.Id == c.Id);
+        return idx != -1 ? idx + 1 : 1;
     }
 
     private IEnumerable<Customer> GetFiltered()
     {
         return customers
             .Where(c => string.IsNullOrEmpty(searchText) ||
-                        c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                        c.CustomerName.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                         (c.Mobile ?? "").Contains(searchText))
             .Where(c => string.IsNullOrEmpty(filterStatus) || c.Status == filterStatus)
-            .Where(c => string.IsNullOrEmpty(filterSalesmanId) || c.AssignedSalesmanId == filterSalesmanId);
+            .Where(c => string.IsNullOrEmpty(filterStaffId) || c.AssignedStaffId == filterStaffId);
     }
 
     private async Task UpdateStatus(string customerId, string status)
     {
         await CustomerService.UpdateCustomerStatusAsync(customerId, status);
         var c = customers.FirstOrDefault(x => x.Id == customerId);
-        if (c != null) c.Status = status;
+        if (c != null)
+        {
+            c.Status = status;
+            // If they converted, we also open the sale value modal
+            if (status == "Converted" || status == "Sale Closed")
+            {
+                OpenSaleModal(c);
+            }
+        }
+    }
+
+    private void OpenSaleModal(Customer c)
+    {
+        selectedCustomer = c;
+        purchaseValueInput = c.PurchaseValue;
+        showSaleModal = true;
+    }
+
+    private async Task SaveSaleValue()
+    {
+        if (selectedCustomer == null) return;
+        
+        await CustomerService.UpdateCustomerPurchaseValueAsync(selectedCustomer.Id, purchaseValueInput, selectedCustomer.Status);
+        selectedCustomer.PurchaseValue = purchaseValueInput;
+        showSaleModal = false;
+        await LoadData();
     }
 }

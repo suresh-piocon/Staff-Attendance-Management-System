@@ -20,7 +20,10 @@
                 <i class="bi bi-check-circle-fill text-success" style="font-size:20px;margin-top:1px;"></i>
                 <div>
                     <div class="fw-600" style="color:#2ecc71;">Customer Added Successfully!</div>
-                    <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">@successMessage</div>
+                    <div style="font-size:14px;color:var(--text-secondary);margin-top:4px;">@successMessage</div>
+                    <div style="font-size:18px;margin-top:8px;font-weight:700;color:var(--gold);">
+                        Token Allocated: #@allocatedToken
+                    </div>
                 </div>
             </div>
         }
@@ -35,7 +38,7 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Customer Name *</label>
-                <input class="form-control" placeholder="Full name" @bind="customer.Name" />
+                <input class="form-control" placeholder="Full name" @bind="customer.CustomerName" />
             </div>
             <div class="form-group">
                 <label class="form-label">Mobile Number</label>
@@ -53,10 +56,6 @@
             </div>
         </div>
         <div class="form-group">
-            <label class="form-label">Interested Product</label>
-            <input class="form-control" placeholder="e.g., Kanjivaram silk, blue color" @bind="customer.InterestedProduct" />
-        </div>
-        <div class="form-group">
             <label class="form-label">Remarks</label>
             <textarea class="form-control" rows="3" placeholder="Any additional notes..."
                       @bind="customer.Remarks" style="resize:vertical;"></textarea>
@@ -64,10 +63,10 @@
 
         <div style="background:rgba(201,162,39,0.06);border:1px solid rgba(201,162,39,0.15);border-radius:10px;padding:14px;margin-bottom:20px;">
             <div style="font-size:12px;color:var(--text-gold);font-weight:600;margin-bottom:4px;">
-                <i class="bi bi-info-circle"></i> Auto-Assignment
+                <i class="bi bi-info-circle"></i> Automatic Round-Robin Assignment
             </div>
             <div style="font-size:12px;color:var(--text-secondary);">
-                A salesman will be automatically assigned using Round Robin — skipping absent salesmen.
+                The system automatically assigns the customer to the next active, present salesman today and increments the daily token number.
             </div>
         </div>
 
@@ -83,7 +82,7 @@
                 <i class="bi bi-arrow-counterclockwise"></i> Reset
             </button>
             <a href="/admin/customers" class="btn-secondary-glass">
-                <i class="bi bi-list"></i> View All
+                <i class="bi bi-list"></i> View Allocation Table
             </a>
         </div>
     </div>
@@ -95,13 +94,14 @@
     private string? successMessage;
     private string? errorMessage;
     private bool isSaving = false;
+    private int allocatedToken = 0;
 
     private async Task SaveCustomer()
     {
         successMessage = null;
         errorMessage = null;
 
-        if (string.IsNullOrWhiteSpace(customer.Name))
+        if (string.IsNullOrWhiteSpace(customer.CustomerName))
         {
             errorMessage = "Customer name is required.";
             return;
@@ -111,8 +111,13 @@
         try
         {
             customer.VisitDate = visitDate.ToString("yyyy-MM-dd");
+            
+            // Calculate Token: number of customers registered for this date + 1
+            var todayCustomers = await CustomerService.GetCustomersByDateAsync(visitDate);
+            allocatedToken = todayCustomers.Count + 1;
+
             var saved = await CustomerService.AddCustomerAsync(customer);
-            successMessage = $"Assigned to salesman successfully. Customer ID: {saved.Id[..8]}...";
+            successMessage = $"Assigned to salesman: {saved.AssignedStaffName}";
             ResetForm();
         }
         catch (Exception ex)

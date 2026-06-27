@@ -1,7 +1,7 @@
 @page "/admin/dashboard"
 @attribute [Authorize(Roles = "Admin")]
 @inject ReportService ReportService
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 
 <PageTitle>Admin Dashboard — Silk Saree</PageTitle>
 
@@ -26,8 +26,8 @@ else if (stats != null)
         <div class="kpi-card gold">
             <div class="kpi-icon gold"><i class="bi bi-people"></i></div>
             <div class="kpi-body">
-                <div class="kpi-value">@stats.TotalSalesmen</div>
-                <div class="kpi-label">Total Salesmen</div>
+                <div class="kpi-value">@stats.TotalStaff</div>
+                <div class="kpi-label">Total Staff</div>
             </div>
         </div>
         <div class="kpi-card green">
@@ -60,31 +60,33 @@ else if (stats != null)
         </div>
     </div>
 
-    <!-- Salesman Performance Table -->
+    <!-- Staff Performance Table -->
     <div class="glass-card">
         <div class="card-header">
-            <div class="card-title"><i class="bi bi-trophy"></i> Salesman Performance</div>
+            <div class="card-title"><i class="bi bi-trophy"></i> Sales Team Performance</div>
         </div>
         <div class="card-body" style="padding:0;">
             <div class="data-table-wrapper">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Salesman</th>
-                            <th>Customers</th>
-                            <th>Converted</th>
+                            <th>Staff Name</th>
+                            <th>Customers Assigned</th>
+                            <th>Converted / Sale Closed</th>
                             <th>Pending Follow-Ups</th>
+                            <th>Total Sales</th>
                             <th>Conversion Rate</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var s in stats.SalesmanStats)
+                        @foreach (var s in stats.StaffStats)
                         {
                             <tr>
-                                <td class="fw-600">@s.SalesmanName</td>
+                                <td class="fw-600">@s.StaffName</td>
                                 <td>@s.TotalCustomers</td>
                                 <td class="text-success">@s.ConvertedCustomers</td>
                                 <td>@s.PendingFollowUps</td>
+                                <td class="text-gold fw-600">₹@(s.TotalSales.ToString("N0"))</td>
                                 <td>
                                     <div class="performance-bar">
                                         <div class="perf-bar-track">

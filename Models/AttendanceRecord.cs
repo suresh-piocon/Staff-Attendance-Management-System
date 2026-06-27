@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Postgrest.Attributes;
 using Postgrest.Models;
 using System;
@@ -10,25 +11,35 @@ namespace SalesmanAttendance.Models
         [PrimaryKey("id", false)]
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
-        [Column("salesman_id")]
-        public string SalesmanId { get; set; } = string.Empty;
+        [Column("staff_id")]
+        public string StaffId { get; set; } = string.Empty;
 
-        [Column("date")]
-        public string Date { get; set; } = DateTime.Today.ToString("yyyy-MM-dd");
+        [Column("attendance_date")]
+        public string AttendanceDate { get; set; } = DateTime.Today.ToString("yyyy-MM-dd");
 
-        [Column("check_in_time")]
-        public DateTime? CheckInTime { get; set; }
+        [Column("morning_in")]
+        public DateTime? MorningIn { get; set; }
 
-        [Column("check_out_time")]
-        public DateTime? CheckOutTime { get; set; }
+        [Column("morning_out")]
+        public DateTime? MorningOut { get; set; }
+
+        [Column("afternoon_in")]
+        public DateTime? AfternoonIn { get; set; }
+
+        [Column("evening_out")]
+        public DateTime? EveningOut { get; set; }
 
         [Column("status")]
         public string Status { get; set; } = "Absent";
 
-        [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        [Column("total_hours")]
+        public decimal TotalHours { get; set; } = 0;
 
-        // Joined data (not mapped to column)
-        public string SalesmanName { get; set; } = string.Empty;
+        // Joined display fields — NOT real DB columns, excluded from INSERT/UPDATE
+        [JsonIgnore]
+        public string StaffName { get; set; } = string.Empty;
+
+        [JsonIgnore]
+        public string StaffCode { get; set; } = string.Empty;
     }
 }

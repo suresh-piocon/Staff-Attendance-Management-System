@@ -4,11 +4,14 @@ using System;
 
 namespace SalesmanAttendance.Models
 {
-    [Table("salesmen")]
-    public class Salesman : BaseModel
+    [Table("staff")]
+    public class Staff : BaseModel
     {
         [PrimaryKey("id", false)]
         public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [Column("staff_code")]
+        public string StaffCode { get; set; } = string.Empty;
 
         [Column("name")]
         public string Name { get; set; } = string.Empty;
@@ -16,8 +19,11 @@ namespace SalesmanAttendance.Models
         [Column("mobile")]
         public string? Mobile { get; set; }
 
-        [Column("joining_date")]
-        public string? JoiningDate { get; set; }
+        [Column("designation")]
+        public string? Designation { get; set; }
+
+        [Column("fingerprint_emp_id")]
+        public string? FingerprintEmpId { get; set; }
 
         [Column("is_active")]
         public bool IsActive { get; set; } = true;
@@ -25,7 +31,7 @@ namespace SalesmanAttendance.Models
         [Column("user_id")]
         public string? UserId { get; set; }
 
-        [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        [Column("created_date")]
+        public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     }
 }

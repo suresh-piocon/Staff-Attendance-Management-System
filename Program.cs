@@ -43,10 +43,10 @@ builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredServ
 builder.Services.AddAuthorizationCore();
 
 // App services
-builder.Services.AddScoped<SalesmanService>();
+builder.Services.AddScoped<StaffService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<CustomerService>();
-builder.Services.AddScoped<AssignmentService>();
+builder.Services.AddScoped<RoundRobinService>();
 builder.Services.AddScoped<FollowUpService>();
 builder.Services.AddScoped<ReportService>();
 

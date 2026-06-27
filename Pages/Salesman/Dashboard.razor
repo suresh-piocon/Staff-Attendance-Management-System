@@ -4,7 +4,7 @@
 @inject CustomerService CustomerService
 @inject FollowUpService FollowUpService
 @inject AuthService AuthService
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 
 <PageTitle>My Dashboard — Silk Saree</PageTitle>
 
@@ -28,36 +28,66 @@ else
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">Today's Attendance</div>
         <div class="checkin-time" id="live-clock">@currentTime</div>
         <div class="checkin-date">@DateTime.Now.ToString("dddd, dd MMMM yyyy")</div>
+        
+        <div style="font-size:12px;margin-bottom:16px;color:var(--text-secondary);">
+            Status: <span class="badge badge-@GetStatusBadge(todayRecord?.Status ?? "Absent")">@(todayRecord?.Status ?? "Absent")</span>
+        </div>
+
+        <!-- Session Punch Times -->
+        <div class="d-flex gap-24 mb-16" style="justify-content:center;font-size:12px;color:var(--text-muted);">
+            <div>
+                <strong>Morning Session:</strong><br />
+                In: @(todayRecord?.MorningIn != null ? todayRecord.MorningIn.Value.ToLocalTime().ToString("hh:mm tt") : "--")<br />
+                Out: @(todayRecord?.MorningOut != null ? todayRecord.MorningOut.Value.ToLocalTime().ToString("hh:mm tt") : "--")
+            </div>
+            <div>
+                <strong>Evening Session:</strong><br />
+                In: @(todayRecord?.AfternoonIn != null ? todayRecord.AfternoonIn.Value.ToLocalTime().ToString("hh:mm tt") : "--")<br />
+                Out: @(todayRecord?.EveningOut != null ? todayRecord.EveningOut.Value.ToLocalTime().ToString("hh:mm tt") : "--")
+            </div>
+        </div>
+
         <div class="d-flex gap-12" style="justify-content:center;">
-            @if (todayRecord == null || todayRecord.Status == "Absent")
-            {
-                <button class="btn-primary-glass" @onclick="CheckIn">
-                    <i class="bi bi-box-arrow-in-right"></i> Check In
-                </button>
-            }
-            else
-            {
-                <span class="badge badge-@GetStatusBadge(todayRecord.Status)" style="padding:8px 16px;font-size:13px;">
-                    <i class="bi bi-check-circle"></i> @todayRecord.Status
-                </span>
-                @if (todayRecord.CheckInTime.HasValue)
+            @{
+                bool showCheckIn = false;
+                bool showCheckOut = false;
+                var localHour = DateTime.Now.Hour;
+
+                if (todayRecord == null)
                 {
-                    <span style="font-size:12px;color:var(--text-secondary);align-self:center;">
-                        In: @todayRecord.CheckInTime.Value.ToLocalTime().ToString("hh:mm tt")
-                    </span>
-                }
-                @if (todayRecord.CheckOutTime == null)
-                {
-                    <button class="btn-secondary-glass btn-sm" @onclick="CheckOut">
-                        <i class="bi bi-box-arrow-right"></i> Check Out
-                    </button>
+                    showCheckIn = true;
                 }
                 else
                 {
-                    <span style="font-size:12px;color:var(--text-secondary);align-self:center;">
-                        Out: @todayRecord.CheckOutTime.Value.ToLocalTime().ToString("hh:mm tt")
-                    </span>
+                    if (localHour < 14) // Morning focus
+                    {
+                        if (todayRecord.MorningIn == null) showCheckIn = true;
+                        else if (todayRecord.MorningOut == null) showCheckOut = true;
+                        else if (todayRecord.AfternoonIn == null) showCheckIn = true; // allow checking in for afternoon early
+                    }
+                    else // Afternoon focus
+                    {
+                        if (todayRecord.AfternoonIn == null) showCheckIn = true;
+                        else if (todayRecord.EveningOut == null) showCheckOut = true;
+                    }
                 }
+            }
+
+            @if (showCheckIn)
+            {
+                <button class="btn-primary-glass" @onclick="CheckIn">
+                    <i class="bi bi-box-arrow-in-right"></i> Punch Check-In
+                </button>
+            }
+            @if (showCheckOut)
+            {
+                <button class="btn-secondary-glass" @onclick="CheckOut">
+                    <i class="bi bi-box-arrow-right"></i> Punch Check-Out
+                </button>
+            }
+            @if (!showCheckIn && !showCheckOut)
+            {
+                <span class="text-success"><i class="bi bi-check-all"></i> Punches completed for today!</span>
             }
         </div>
     </div>
@@ -109,7 +139,7 @@ else
                                 <th>Name</th>
                                 <th>Mobile</th>
                                 <th>City</th>
-                                <th>Product</th>
+                                <th>Remarks</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
@@ -117,11 +147,11 @@ else
                             @foreach (var c in todayCustomers)
                             {
                                 <tr>
-                                    <td class="fw-600">@c.Name</td>
+                                    <td class="fw-600">@c.CustomerName</td>
                                     <td class="muted">@c.Mobile</td>
                                     <td class="muted">@c.City</td>
-                                    <td class="muted">@c.InterestedProduct</td>
-                                    <td><span class="badge badge-@c.Status.ToLower()">@c.Status</span></td>
+                                    <td class="muted">@c.Remarks</td>
+                                    <td><span class="badge badge-@c.Status.Replace(" ", "").ToLower()">@c.Status</span></td>
                                 </tr>
                             }
                         </tbody>
@@ -154,8 +184,8 @@ else
                             @foreach (var f in todayFollowUps)
                             {
                                 <tr>
-                                    <td class="fw-600">@f.CustomerId</td>
-                                    <td class="muted">—</td>
+                                    <td class="fw-600">@f.CustomerName</td>
+                                    <td class="muted">@f.CustomerMobile</td>
                                     <td><span class="badge badge-followup">@f.Status</span></td>
                                     <td class="muted">@f.Remarks</td>
                                     <td>
@@ -180,16 +210,16 @@ else
     private int totalCustomers = 0;
     private int pendingFollowUps = 0;
     private bool isLoading = true;
-    private string? salesmanId;
+    private string? staffId;
     private string currentTime = DateTime.Now.ToString("hh:mm:ss tt");
 
     protected override async Task OnInitializedAsync()
     {
         var userId = AuthService.GetCurrentUser()?.Id ?? "";
-        var salesman = await SalesmanService.GetSalesmanByUserIdAsync(userId);
-        salesmanId = salesman?.Id;
+        var staff = await StaffService.GetStaffByUserIdAsync(userId);
+        staffId = staff?.Id;
 
-        if (salesmanId != null)
+        if (staffId != null)
             await LoadData();
 
         isLoading = false;
@@ -197,29 +227,29 @@ else
 
     private async Task LoadData()
     {
-        if (salesmanId == null) return;
-        todayRecord = await AttendanceService.GetTodayRecordAsync(salesmanId);
-        todayCustomers = (await CustomerService.GetCustomersBySalesmanAsync(salesmanId))
+        if (staffId == null) return;
+        todayRecord = await AttendanceService.GetRecordByStaffAndDateAsync(staffId, DateTime.Today);
+        todayCustomers = (await CustomerService.GetCustomersByStaffAsync(staffId))
             .Where(c => c.VisitDate == DateTime.Today.ToString("yyyy-MM-dd")).ToList();
-        var allCustomers = await CustomerService.GetCustomersBySalesmanAsync(salesmanId);
+        var allCustomers = await CustomerService.GetCustomersByStaffAsync(staffId);
         totalCustomers = allCustomers.Count;
-        todayFollowUps = await FollowUpService.GetTodayFollowUpsAsync(salesmanId);
-        pendingFollowUps = await FollowUpService.GetPendingCountBySalesmanAsync(salesmanId);
+        todayFollowUps = await FollowUpService.GetTodayFollowUpsAsync(staffId);
+        pendingFollowUps = await FollowUpService.GetPendingCountByStaffAsync(staffId);
         currentTime = DateTime.Now.ToString("hh:mm:ss tt");
     }
 
     private async Task CheckIn()
     {
-        if (salesmanId == null) return;
-        await AttendanceService.CheckInAsync(salesmanId);
-        todayRecord = await AttendanceService.GetTodayRecordAsync(salesmanId);
+        if (staffId == null) return;
+        await AttendanceService.CheckInAsync(staffId);
+        await LoadData();
     }
 
     private async Task CheckOut()
     {
-        if (salesmanId == null) return;
-        await AttendanceService.CheckOutAsync(salesmanId);
-        todayRecord = await AttendanceService.GetTodayRecordAsync(salesmanId);
+        if (staffId == null) return;
+        await AttendanceService.CheckOutAsync(staffId);
+        await LoadData();
     }
 
     private string GetStatusBadge(string status) => status.Replace(" ", "").ToLower();

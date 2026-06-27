@@ -10,12 +10,14 @@ namespace SalesmanAttendance.Services
     public class CustomerService
     {
         private readonly Supabase.Client _supabase;
-        private readonly AssignmentService _assignmentService;
+        private readonly RoundRobinService _roundRobinService;
+        private readonly StaffService _staffService;
 
-        public CustomerService(Supabase.Client supabase, AssignmentService assignmentService)
+        public CustomerService(Supabase.Client supabase, RoundRobinService roundRobinService, StaffService staffService)
         {
             _supabase = supabase;
-            _assignmentService = assignmentService;
+            _roundRobinService = roundRobinService;
+            _staffService = staffService;
         }
 
         public async Task<List<Customer>> GetAllCustomersAsync()
@@ -23,36 +25,42 @@ namespace SalesmanAttendance.Services
             var result = await _supabase.From<Customer>()
                 .Order("created_at", Postgrest.Constants.Ordering.Descending)
                 .Get();
-            return result.Models ?? new List<Customer>();
+            var list = result.Models ?? new List<Customer>();
+            await PopulateStaffNamesAsync(list);
+            return list;
         }
 
-        public async Task<List<Customer>> GetCustomersBySalesmanAsync(string salesmanId)
+        public async Task<List<Customer>> GetCustomersByStaffAsync(string staffId)
         {
             var result = await _supabase.From<Customer>()
-                .Filter("assigned_salesman_id", Postgrest.Constants.Operator.Equals, salesmanId)
+                .Filter("assigned_staff_id", Postgrest.Constants.Operator.Equals, staffId)
                 .Order("created_at", Postgrest.Constants.Ordering.Descending)
                 .Get();
-            return result.Models ?? new List<Customer>();
+            var list = result.Models ?? new List<Customer>();
+            await PopulateStaffNamesAsync(list);
+            return list;
         }
 
-        public async Task<List<Customer>> GetTodayCustomersAsync()
+        public async Task<List<Customer>> GetCustomersByDateAsync(DateTime date)
         {
-            var today = DateTime.Today.ToString("yyyy-MM-dd");
+            var dateStr = date.ToString("yyyy-MM-dd");
             var result = await _supabase.From<Customer>()
-                .Filter("visit_date", Postgrest.Constants.Operator.Equals, today)
-                .Order("created_at", Postgrest.Constants.Ordering.Descending)
+                .Filter("visit_date", Postgrest.Constants.Operator.Equals, dateStr)
+                .Order("created_at", Postgrest.Constants.Ordering.Ascending)
                 .Get();
-            return result.Models ?? new List<Customer>();
+            var list = result.Models ?? new List<Customer>();
+            await PopulateStaffNamesAsync(list);
+            return list;
         }
 
         public async Task<Customer> AddCustomerAsync(Customer customer)
         {
             // Auto-assign salesman via round robin
-            var salesman = await _assignmentService.AssignNextSalesmanAsync();
-            if (salesman != null)
+            var staff = await _roundRobinService.AssignNextStaffAsync();
+            if (staff != null)
             {
-                customer.AssignedSalesmanId = salesman.Id;
-                customer.AssignedSalesmanName = salesman.Name;
+                customer.AssignedStaffId = staff.Id;
+                customer.AssignedStaffName = staff.Name;
             }
 
             var result = await _supabase.From<Customer>().Insert(customer);
@@ -63,6 +71,15 @@ namespace SalesmanAttendance.Services
         {
             await _supabase.From<Customer>()
                 .Filter("id", Postgrest.Constants.Operator.Equals, customerId)
+                .Set(c => c.Status, status)
+                .Update();
+        }
+
+        public async Task UpdateCustomerPurchaseValueAsync(string customerId, decimal purchaseValue, string status)
+        {
+            await _supabase.From<Customer>()
+                .Filter("id", Postgrest.Constants.Operator.Equals, customerId)
+                .Set(c => c.PurchaseValue, purchaseValue)
                 .Set(c => c.Status, status)
                 .Update();
         }
@@ -80,6 +97,23 @@ namespace SalesmanAttendance.Services
                 .Filter("visit_date", Postgrest.Constants.Operator.Equals, today)
                 .Get();
             return result.Models?.Count ?? 0;
+        }
+
+        private async Task PopulateStaffNamesAsync(List<Customer> customers)
+        {
+            if (!customers.Any()) return;
+            var staffList = await _staffService.GetAllStaffAsync();
+            foreach (var c in customers)
+            {
+                if (!string.IsNullOrEmpty(c.AssignedStaffId))
+                {
+                    var s = staffList.FirstOrDefault(x => x.Id == c.AssignedStaffId);
+                    if (s != null)
+                    {
+                        c.AssignedStaffName = s.Name;
+                    }
+                }
+            }
         }
     }
 }

@@ -3,7 +3,7 @@
 @inject FollowUpService FollowUpService
 @inject CustomerService CustomerService
 @inject AuthService AuthService
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 
 <PageTitle>My Follow-Ups — Silk Saree</PageTitle>
 
@@ -19,10 +19,12 @@
 <div class="filter-bar">
     <select class="form-control" @bind="filterStatus">
         <option value="">All Status</option>
+        <option>New</option>
+        <option>Follow-up Pending</option>
         <option>Interested</option>
         <option>Not Interested</option>
-        <option>Purchase Confirmed</option>
-        <option>Follow-up Again</option>
+        <option>Converted</option>
+        <option>Sale Closed</option>
     </select>
     <input type="date" class="form-control" style="max-width:180px;"
            value="@filterDateStr"
@@ -34,22 +36,21 @@
 
 @if (isLoading)
 {
-    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+    <div class="loading-container"><span class="spinner-sm"></span> Loading follow-up data...</div>
 }
 else
 {
     <!-- Today's pending highlight -->
-    @if (followUps.Any(f => f.NextFollowUpDate == DateTime.Today.ToString("yyyy-MM-dd") && f.Status == "Follow-up Again"))
+    @if (followUps.Any(f => f.FollowUpDate == DateTime.Today.ToString("yyyy-MM-dd") && f.Status == "Follow-up Pending"))
     {
-        var todayPendingItems = followUps.Where(f => f.NextFollowUpDate == DateTime.Today.ToString("yyyy-MM-dd") && f.Status == "Follow-up Again").ToList();
+        var todayPendingItems = followUps.Where(f => f.FollowUpDate == DateTime.Today.ToString("yyyy-MM-dd") && f.Status == "Follow-up Pending").ToList();
         <div style="background:rgba(243,156,18,0.08);border:1px solid rgba(243,156,18,0.25);border-radius:12px;padding:16px 20px;margin-bottom:20px;">
             <div style="color:#f39c12;font-weight:700;margin-bottom:8px;">
                 <i class="bi bi-alarm"></i> @todayPendingItems.Count Follow-Up(s) Due Today!
             </div>
             @foreach (var f in todayPendingItems)
             {
-                var cust = customers.FirstOrDefault(c => c.Id == f.CustomerId);
-                <div style="font-size:13px;color:var(--text-secondary);">• @(cust?.Name ?? "Customer") — @cust?.Mobile</div>
+                <div style="font-size:13px;color:var(--text-secondary);">• @f.CustomerName — @f.CustomerMobile</div>
             }
         </div>
     }
@@ -60,11 +61,10 @@ else
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Customer</th>
+                            <th>Customer Name</th>
                             <th>Mobile</th>
                             <th>Follow-Up Date</th>
                             <th>Status</th>
-                            <th>Next Follow-Up</th>
                             <th>Remarks</th>
                             <th>Action</th>
                         </tr>
@@ -75,20 +75,19 @@ else
                         }
                         @if (!filtered.Any())
                         {
-                            <tr><td colspan="7"><div class="empty-state"><i class="bi bi-bell-slash"></i><p>No follow-ups found</p></div></td></tr>
+                            <tr><td colspan="6"><div class="empty-state"><i class="bi bi-bell-slash"></i><p>No follow-ups found</p></div></td></tr>
                         }
                         else
                         {
                             @foreach (var f in filtered)
                             {
-                                var cust = customers.FirstOrDefault(c => c.Id == f.CustomerId);
+                                var statusClass = f.Status.Replace(" ", "").ToLower();
                                 <tr>
-                                    <td class="fw-600">@(cust?.Name ?? "Unknown")</td>
-                                    <td class="muted">@cust?.Mobile</td>
+                                    <td class="fw-600">@f.CustomerName</td>
+                                    <td class="muted">@f.CustomerMobile</td>
                                     <td class="muted">@f.FollowUpDate</td>
-                                    <td><span class="badge badge-@GetStatusClass(f.Status)">@f.Status</span></td>
-                                    <td class="muted">@f.NextFollowUpDate</td>
-                                    <td class="muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@f.Remarks</td>
+                                    <td><span class="badge badge-@statusClass">@f.Status</span></td>
+                                    <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@f.Remarks">@f.Remarks</td>
                                     <td>
                                         <button class="btn-secondary-glass btn-sm btn-icon" title="Update"
                                                 @onclick="() => OpenEdit(f)">
@@ -118,19 +117,19 @@ else
                 <div class="form-group">
                     <label class="form-label">Status</label>
                     <select class="form-control" @bind="editFollowUp.Status">
+                        <option>New</option>
+                        <option>Follow-up Pending</option>
                         <option>Interested</option>
                         <option>Not Interested</option>
-                        <option>Purchase Confirmed</option>
-                        <option>Follow-up Again</option>
+                        <option>Converted</option>
+                        <option>Sale Closed</option>
                     </select>
                 </div>
-                @if (editFollowUp.Status == "Follow-up Again")
+                @if (editFollowUp.Status == "Converted" || editFollowUp.Status == "Sale Closed")
                 {
                     <div class="form-group">
-                        <label class="form-label">Next Follow-Up Date</label>
-                        <input type="date" class="form-control"
-                               value="@editFollowUp.NextFollowUpDate"
-                               @onchange="@(e => editFollowUp.NextFollowUpDate = e.Value?.ToString())" />
+                        <label class="form-label">Purchase Value (INR)</label>
+                        <input type="number" class="form-control" placeholder="Enter amount in ₹" @bind="purchaseValueInput" />
                     </div>
                 }
                 <div class="form-group">
@@ -151,29 +150,30 @@ else
 @code {
     private List<FollowUp> followUps = new();
     private List<Customer> customers = new();
-    private string? salesmanId;
+    private string? staffId;
     private string filterStatus = "";
     private string filterDateStr = "";
     private bool isLoading = true;
     private bool showEditModal = false;
     private bool isSaving = false;
     private FollowUp? editFollowUp;
+    private decimal purchaseValueInput = 0;
 
     protected override async Task OnInitializedAsync()
     {
         var userId = AuthService.GetCurrentUser()?.Id ?? "";
-        var salesman = await SalesmanService.GetSalesmanByUserIdAsync(userId);
-        salesmanId = salesman?.Id;
+        var staff = await StaffService.GetStaffByUserIdAsync(userId);
+        staffId = staff?.Id;
         await LoadData();
     }
 
     private async Task LoadData()
     {
         isLoading = true;
-        if (salesmanId != null)
+        if (staffId != null)
         {
-            followUps = await FollowUpService.GetFollowUpsBySalesmanAsync(salesmanId);
-            customers = await CustomerService.GetCustomersBySalesmanAsync(salesmanId);
+            followUps = await FollowUpService.GetFollowUpsByStaffAsync(staffId);
+            customers = await CustomerService.GetCustomersByStaffAsync(staffId);
         }
         isLoading = false;
     }
@@ -195,31 +195,50 @@ else
         {
             Id = f.Id,
             CustomerId = f.CustomerId,
-            SalesmanId = f.SalesmanId,
+            CustomerName = f.CustomerName,
+            CustomerMobile = f.CustomerMobile,
+            StaffId = f.StaffId,
+            StaffName = f.StaffName,
             FollowUpDate = f.FollowUpDate,
             Status = f.Status,
-            Remarks = f.Remarks,
-            NextFollowUpDate = f.NextFollowUpDate
+            Remarks = f.Remarks
         };
+
+        var cust = customers.FirstOrDefault(c => c.Id == f.CustomerId);
+        purchaseValueInput = cust?.PurchaseValue ?? 0;
+
         showEditModal = true;
     }
 
     private async Task SaveEdit()
     {
-        if (editFollowUp == null) return;
+        if (editFollowUp == null || staffId == null) return;
         isSaving = true;
-        await FollowUpService.UpdateFollowUpAsync(editFollowUp);
-        isSaving = false;
-        showEditModal = false;
-        await LoadData();
-    }
 
-    private string GetStatusClass(string? status) => status switch
-    {
-        "Interested" => "interested",
-        "Not Interested" => "notinterested",
-        "Purchase Confirmed" => "confirmed",
-        "Follow-up Again" => "followup",
-        _ => "notmarked"
-    };
+        try
+        {
+            await FollowUpService.UpdateFollowUpAsync(editFollowUp);
+
+            // Update customer status and purchase value
+            if (editFollowUp.Status == "Converted" || editFollowUp.Status == "Sale Closed")
+            {
+                await CustomerService.UpdateCustomerPurchaseValueAsync(editFollowUp.CustomerId, purchaseValueInput, editFollowUp.Status);
+            }
+            else
+            {
+                await CustomerService.UpdateCustomerStatusAsync(editFollowUp.CustomerId, editFollowUp.Status);
+            }
+
+            showEditModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error saving follow-up: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
 }

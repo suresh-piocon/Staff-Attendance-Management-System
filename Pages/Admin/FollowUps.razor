@@ -1,14 +1,17 @@
 @page "/admin/followups"
 @attribute [Authorize(Roles = "Admin")]
 @inject FollowUpService FollowUpService
-@inject SalesmanService SalesmanService
+@inject StaffService StaffService
 @inject CustomerService CustomerService
 
 <PageTitle>Follow-Ups — Silk Saree</PageTitle>
 
 <div class="page-header">
     <h1><i class="bi bi-bell"></i> All Follow-Ups</h1>
-    <div class="page-header-actions">
+    <div class="page-header-actions d-flex gap-8">
+        <button class="btn-primary-glass btn-sm" @onclick="OpenAddModal">
+            <i class="bi bi-plus-lg"></i> Schedule Follow-Up
+        </button>
         <button class="btn-secondary-glass btn-sm" @onclick="LoadData">
             <i class="bi bi-arrow-clockwise"></i> Refresh
         </button>
@@ -18,14 +21,16 @@
 <div class="filter-bar">
     <select class="form-control" @bind="filterStatus">
         <option value="">All Status</option>
+        <option>New</option>
+        <option>Follow-up Pending</option>
         <option>Interested</option>
         <option>Not Interested</option>
-        <option>Purchase Confirmed</option>
-        <option>Follow-up Again</option>
+        <option>Converted</option>
+        <option>Sale Closed</option>
     </select>
-    <select class="form-control" @bind="filterSalesmanId">
-        <option value="">All Salesmen</option>
-        @foreach (var s in salesmen)
+    <select class="form-control" @bind="filterStaffId">
+        <option value="">All Staff</option>
+        @foreach (var s in staffList)
         {
             <option value="@s.Id">@s.Name</option>
         }
@@ -34,7 +39,7 @@
 
 @if (isLoading)
 {
-    <div class="loading-container"><span class="spinner-sm"></span> Loading...</div>
+    <div class="loading-container"><span class="spinner-sm"></span> Loading follow-up logs...</div>
 }
 else
 {
@@ -44,19 +49,20 @@ else
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Customer</th>
-                            <th>Salesman</th>
+                            <th>Customer Name</th>
+                            <th>Staff Name</th>
                             <th>Follow-Up Date</th>
                             <th>Status</th>
-                            <th>Next Follow-Up</th>
                             <th>Remarks</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         @{
                             var filtered = followUps
                                 .Where(f => string.IsNullOrEmpty(filterStatus) || f.Status == filterStatus)
-                                .Where(f => string.IsNullOrEmpty(filterSalesmanId) || f.SalesmanId == filterSalesmanId);
+                                .Where(f => string.IsNullOrEmpty(filterStaffId) || f.StaffId == filterStaffId)
+                                .ToList();
                         }
                         @if (!filtered.Any())
                         {
@@ -66,15 +72,16 @@ else
                         {
                             @foreach (var f in filtered)
                             {
-                                var custName = customers.FirstOrDefault(c => c.Id == f.CustomerId)?.Name ?? "Unknown";
-                                var salesmanName = salesmen.FirstOrDefault(s => s.Id == f.SalesmanId)?.Name ?? "Unknown";
+                                var statusClass = f.Status.Replace(" ", "").ToLower();
                                 <tr>
-                                    <td class="fw-600">@custName</td>
-                                    <td class="text-gold">@salesmanName</td>
+                                    <td class="fw-600">@f.CustomerName</td>
+                                    <td class="text-gold fw-600">@f.StaffName</td>
                                     <td class="muted">@f.FollowUpDate</td>
-                                    <td><span class="badge badge-@GetStatusClass(f.Status)">@f.Status</span></td>
-                                    <td class="muted">@f.NextFollowUpDate</td>
-                                    <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@f.Remarks</td>
+                                    <td><span class="badge badge-@statusClass">@f.Status</span></td>
+                                    <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@f.Remarks">@f.Remarks</td>
+                                    <td>
+                                        <button class="btn-secondary-glass btn-sm" @onclick="() => EditFollowUp(f)">Edit</button>
+                                    </td>
                                 </tr>
                             }
                         }
@@ -85,13 +92,90 @@ else
     </div>
 }
 
+<!-- Add/Edit FollowUp Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick:stopPropagation>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="bi bi-bell"></i> @(editMode ? "Edit" : "Schedule") Follow-Up</h3>
+                <button class="modal-close" @onclick="() => showModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                @if (!editMode)
+                {
+                    <div class="form-group">
+                        <label class="form-label">Select Customer *</label>
+                        <select class="form-control" @bind="currentFollowUp.CustomerId" @bind:after="OnCustomerSelected">
+                            <option value="">-- Select Customer --</option>
+                            @foreach (var c in customersList)
+                            {
+                                <option value="@c.Id">@c.CustomerName (@c.Mobile)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Assigned Staff</label>
+                        <input class="form-control" value="@assignedStaffName" disabled />
+                    </div>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label class="form-label">Customer</label>
+                        <input class="form-control" value="@currentFollowUp.CustomerName" disabled />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Staff Member</label>
+                        <input class="form-control" value="@currentFollowUp.StaffName" disabled />
+                    </div>
+                }
+                <div class="form-group">
+                    <label class="form-label">Follow-Up Date *</label>
+                    <input type="date" class="form-control" @bind="followUpDate" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status *</label>
+                    <select class="form-control" @bind="currentFollowUp.Status">
+                        <option>New</option>
+                        <option>Follow-up Pending</option>
+                        <option>Interested</option>
+                        <option>Not Interested</option>
+                        <option>Converted</option>
+                        <option>Sale Closed</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Remarks</label>
+                    <textarea class="form-control" rows="3" placeholder="Enter notes..." @bind="currentFollowUp.Remarks"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary-glass" @onclick="() => showModal = false">Cancel</button>
+                <button class="btn-primary-glass" @onclick="SaveFollowUp" disabled="@isSaving">
+                    @if (isSaving) { <span class="spinner-sm"></span> }
+                    @(editMode ? "Update" : "Schedule")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<FollowUp> followUps = new();
-    private List<Salesman> salesmen = new();
-    private List<Customer> customers = new();
+    private List<Staff> staffList = new();
+    private List<Customer> customersList = new();
     private string filterStatus = "";
-    private string filterSalesmanId = "";
+    private string filterStaffId = "";
     private bool isLoading = true;
+
+    // Modal
+    private bool showModal = false;
+    private bool editMode = false;
+    private bool isSaving = false;
+    private FollowUp currentFollowUp = new();
+    private DateTime followUpDate = DateTime.Today;
+    private string assignedStaffName = string.Empty;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -99,17 +183,90 @@ else
     {
         isLoading = true;
         followUps = await FollowUpService.GetAllFollowUpsAsync();
-        salesmen = await SalesmanService.GetAllSalesmenAsync();
-        customers = await CustomerService.GetAllCustomersAsync();
+        staffList = await StaffService.GetAllStaffAsync();
+        customersList = await CustomerService.GetAllCustomersAsync();
         isLoading = false;
     }
 
-    private string GetStatusClass(string? status) => status switch
+    private void OpenAddModal()
     {
-        "Interested" => "interested",
-        "Not Interested" => "notinterested",
-        "Purchase Confirmed" => "confirmed",
-        "Follow-up Again" => "followup",
-        _ => "notmarked"
-    };
+        currentFollowUp = new FollowUp { Status = "Follow-up Pending" };
+        followUpDate = DateTime.Today;
+        assignedStaffName = string.Empty;
+        editMode = false;
+        showModal = true;
+    }
+
+    private void OnCustomerSelected()
+    {
+        if (string.IsNullOrEmpty(currentFollowUp.CustomerId))
+        {
+            assignedStaffName = string.Empty;
+            return;
+        }
+
+        var cust = customersList.FirstOrDefault(c => c.Id == currentFollowUp.CustomerId);
+        if (cust != null)
+        {
+            currentFollowUp.StaffId = cust.AssignedStaffId ?? string.Empty;
+            assignedStaffName = staffList.FirstOrDefault(s => s.Id == cust.AssignedStaffId)?.Name ?? "Unassigned";
+        }
+    }
+
+    private void EditFollowUp(FollowUp f)
+    {
+        currentFollowUp = new FollowUp
+        {
+            Id = f.Id,
+            CustomerId = f.CustomerId,
+            CustomerName = f.CustomerName,
+            StaffId = f.StaffId,
+            StaffName = f.StaffName,
+            Remarks = f.Remarks,
+            Status = f.Status,
+            FollowUpDate = f.FollowUpDate
+        };
+        
+        if (DateTime.TryParse(f.FollowUpDate, out DateTime d))
+            followUpDate = d;
+        else
+            followUpDate = DateTime.Today;
+
+        editMode = true;
+        showModal = true;
+    }
+
+    private async Task SaveFollowUp()
+    {
+        if (string.IsNullOrEmpty(currentFollowUp.CustomerId) || string.IsNullOrEmpty(currentFollowUp.StaffId)) return;
+        isSaving = true;
+
+        try
+        {
+            currentFollowUp.FollowUpDate = followUpDate.ToString("yyyy-MM-dd");
+
+            if (editMode)
+            {
+                await FollowUpService.UpdateFollowUpAsync(currentFollowUp);
+            }
+            else
+            {
+                await FollowUpService.AddFollowUpAsync(currentFollowUp);
+            }
+
+            // Sync status to Customer as well
+            await CustomerService.UpdateCustomerStatusAsync(currentFollowUp.CustomerId, currentFollowUp.Status);
+
+            showModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error saving followup: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
 }
