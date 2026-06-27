@@ -84,6 +84,7 @@ else
                             <th>Evening Out (07:00 PM)</th>
                             <th>Auto Status</th>
                             <th>Total Hours</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -117,6 +118,24 @@ else
                                     <span class="badge badge-@statusClass">@row.Record.Status</span>
                                 </td>
                                 <td class="fw-600">@row.Record.TotalHours hrs</td>
+                                <td>
+                                    <button class="btn-primary-glass btn-sm btn-icon" title="Save this staff member" 
+                                            @onclick="() => SaveRow(row)" 
+                                            disabled="@isSavingRow.Contains(row.Staff.Id)">
+                                        @if (isSavingRow.Contains(row.Staff.Id))
+                                        {
+                                            <span class="spinner-sm"></span>
+                                        }
+                                        else if (savedRows.Contains(row.Staff.Id))
+                                        {
+                                            <i class="bi bi-check-lg text-success" style="font-size:14px;"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-save"></i>
+                                        }
+                                    </button>
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -212,6 +231,9 @@ else
     private string errorMessage = string.Empty;
     private bool saveSuccess = false;
 
+    private HashSet<string> isSavingRow = new();
+    private HashSet<string> savedRows = new();
+
     // Modals
     private bool showImportModal = false;
     private string csvContent = string.Empty;
@@ -274,6 +296,38 @@ else
         row.Record.Status = status;
         row.Record.TotalHours = hours;
         saveSuccess = false;
+    }
+
+    private async Task SaveRow(GridRowItem row)
+    {
+        errorMessage = string.Empty;
+        isSavingRow.Add(row.Staff.Id);
+        savedRows.Remove(row.Staff.Id);
+
+        try
+        {
+            await AttendanceService.SaveAttendanceRecordAsync(row.Record);
+            savedRows.Add(row.Staff.Id);
+            
+            // Recalculate statistics
+            StateHasChanged();
+
+            // Clear check mark after 3 seconds
+            _ = Task.Delay(3000).ContinueWith(_ =>
+            {
+                savedRows.Remove(row.Staff.Id);
+                InvokeAsync(StateHasChanged);
+            });
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to save {row.Staff.Name}: {ex.Message}";
+        }
+        finally
+        {
+            isSavingRow.Remove(row.Staff.Id);
+            StateHasChanged();
+        }
     }
 
     private async Task SaveAllManual()

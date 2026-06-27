@@ -70,12 +70,7 @@ namespace SalesmanAttendance.Services
 
         public async Task UpdateFollowUpAsync(FollowUp followUp)
         {
-            await _supabase.From<FollowUp>()
-                .Filter("id", Postgrest.Constants.Operator.Equals, followUp.Id)
-                .Set(f => f.Status, followUp.Status)
-                .Set(f => f.Remarks!, followUp.Remarks!)
-                .Set(f => f.FollowUpDate, followUp.FollowUpDate)
-                .Update();
+            await _supabase.From<FollowUp>().Update(followUp);
         }
 
         public async Task<int> GetPendingCountByStaffAsync(string staffId)

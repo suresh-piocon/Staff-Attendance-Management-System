@@ -69,19 +69,25 @@ namespace SalesmanAttendance.Services
 
         public async Task UpdateCustomerStatusAsync(string customerId, string status)
         {
-            await _supabase.From<Customer>()
-                .Filter("id", Postgrest.Constants.Operator.Equals, customerId)
-                .Set(c => c.Status, status)
-                .Update();
+            var result = await _supabase.From<Customer>().Filter("id", Postgrest.Constants.Operator.Equals, customerId).Get();
+            var customer = result.Models?.FirstOrDefault();
+            if (customer != null)
+            {
+                customer.Status = status;
+                await _supabase.From<Customer>().Update(customer);
+            }
         }
 
         public async Task UpdateCustomerPurchaseValueAsync(string customerId, decimal purchaseValue, string status)
         {
-            await _supabase.From<Customer>()
-                .Filter("id", Postgrest.Constants.Operator.Equals, customerId)
-                .Set(c => c.PurchaseValue, purchaseValue)
-                .Set(c => c.Status, status)
-                .Update();
+            var result = await _supabase.From<Customer>().Filter("id", Postgrest.Constants.Operator.Equals, customerId).Get();
+            var customer = result.Models?.FirstOrDefault();
+            if (customer != null)
+            {
+                customer.PurchaseValue = purchaseValue;
+                customer.Status = status;
+                await _supabase.From<Customer>().Update(customer);
+            }
         }
 
         public async Task<int> GetTotalCustomerCountAsync()

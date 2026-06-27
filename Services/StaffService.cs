@@ -47,15 +47,7 @@ namespace SalesmanAttendance.Services
 
         public async Task UpdateStaffAsync(Staff staff)
         {
-            await _supabase.From<Staff>()
-                .Filter("id", Postgrest.Constants.Operator.Equals, staff.Id)
-                .Set(s => s.StaffCode, staff.StaffCode)
-                .Set(s => s.Name, staff.Name)
-                .Set(s => s.Mobile!, staff.Mobile!)
-                .Set(s => s.Designation!, staff.Designation!)
-                .Set(s => s.FingerprintEmpId!, staff.FingerprintEmpId!)
-                .Set(s => s.IsActive, staff.IsActive)
-                .Update();
+            await _supabase.From<Staff>().Update(staff);
         }
 
         public async Task ToggleActiveAsync(string staffId, bool isActive)

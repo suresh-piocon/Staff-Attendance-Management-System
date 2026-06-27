@@ -310,5 +310,66 @@ namespace SalesmanAttendance.Services
 
             await SaveAttendanceRecordAsync(record);
         }
+
+        public async Task<(string StaffName, string PunchType)> RecordFingerprintPunchAsync(string fingerprintEmpId, DateTime punchTime)
+        {
+            // 1. Find the staff member
+            var staffResult = await _supabase.From<Staff>()
+                .Filter("fingerprint_emp_id", Postgrest.Constants.Operator.Equals, fingerprintEmpId)
+                .Filter("is_active", Postgrest.Constants.Operator.Equals, "true")
+                .Get();
+            var staff = staffResult.Models?.FirstOrDefault();
+            if (staff == null)
+            {
+                throw new Exception("Fingerprint ID not recognized or inactive.");
+            }
+
+            var todayStr = DateTime.Today.ToString("yyyy-MM-dd");
+            var record = await GetRecordByStaffAndDateAsync(staff.Id, DateTime.Today);
+            if (record == null)
+            {
+                record = new AttendanceRecord
+                {
+                    StaffId = staff.Id,
+                    AttendanceDate = todayStr,
+                    Status = "Absent",
+                    TotalHours = 0
+                };
+            }
+
+            // Convert local punch time to UTC
+            var utcTime = punchTime.ToUniversalTime();
+            string punchType = string.Empty;
+
+            // 2. Assign punch to the next empty slot in sequence
+            if (record.MorningIn == null)
+            {
+                record.MorningIn = utcTime;
+                punchType = "Morning In";
+            }
+            else if (record.MorningOut == null)
+            {
+                record.MorningOut = utcTime;
+                punchType = "Morning Out";
+            }
+            else if (record.AfternoonIn == null)
+            {
+                record.AfternoonIn = utcTime;
+                punchType = "Afternoon In";
+            }
+            else if (record.EveningOut == null)
+            {
+                record.EveningOut = utcTime;
+                punchType = "Evening Out";
+            }
+            else
+            {
+                throw new Exception("All 4 punches for today are already recorded.");
+            }
+
+            // 3. Save and calculate status
+            await SaveAttendanceRecordAsync(record);
+            return (staff.Name, punchType);
+        }
     }
 }
